@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 rayon = "1"
+trash = "5"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
