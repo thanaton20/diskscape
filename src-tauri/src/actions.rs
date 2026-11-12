@@ -1,5 +1,6 @@
 //! Commands that act on files: delete, reveal, and asking for more access.
 
+use crate::dto::display_path;
 use crate::state::{AppState, NO_TREE};
 use diskscape_core::delete::{
     delete, effective_selection, is_system_path, DeleteError, DeleteMode, DeleteOutcome,
@@ -23,7 +24,8 @@ pub struct SelectionInfo {
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteErrorDto {
-    /// `readOnly`, `notFound`, `refused`, `trashUnavailable` or `io`.
+    /// `readOnly`, `notFound`, `refused`, `trashUnavailable`, `partial` or `io`.
+    /// Only `partial` means that something may have been deleted.
     pub kind: &'static str,
     pub message: String,
 }
@@ -61,6 +63,7 @@ pub fn delete_result(outcome: &DeleteOutcome) -> DeleteResult {
         },
         DeleteError::Refused(why) => DeleteErrorDto { kind: "refused", message: why.clone() },
         DeleteError::TrashUnavailable(why) => DeleteErrorDto { kind: "trashUnavailable", message: why.clone() },
+        DeleteError::Partial(why) => DeleteErrorDto { kind: "partial", message: why.clone() },
         DeleteError::Io(why) => DeleteErrorDto { kind: "io", message: why.clone() },
     });
     DeleteResult {
@@ -81,13 +84,26 @@ pub fn parse_mode(mode: &str) -> Result<DeleteMode, String> {
     }
 }
 
+/// Node ids are only meaningful inside the tree they came from. If the tree
+/// was replaced (a new scan, an import) after the selection was made, the
+/// same numbers would point at unrelated files.
+pub fn check_tree(tree: &Tree, tree_id: u64) -> Result<(), String> {
+    if tree.token() == tree_id {
+        Ok(())
+    } else {
+        Err("the list has changed since this selection was made; nothing was deleted".into())
+    }
+}
+
 /// Path to show in the file manager; refused for imported trees, whose paths
 /// may describe another machine.
 pub fn reveal_path(tree: &Tree, id: NodeId) -> Result<PathBuf, String> {
     if tree.read_only() {
         return Err("this view was opened from a file; its paths may not exist here".into());
     }
-    tree.node(id).map(|_| tree.path(id)).ok_or_else(|| "the object is no longer in the list".into())
+    tree.node(id)
+        .map(|_| PathBuf::from(display_path(&tree.path(id))))
+        .ok_or_else(|| "the object is no longer in the list".into())
 }
 
 /// `pkexec env VAR=… <exe>`: a root process started by pkexec gets a clean
@@ -115,10 +131,16 @@ pub fn get_selection_info(ids: Vec<NodeId>, state: State<'_, AppState>) -> Resul
 
 /// Deletes exactly the given nodes. Only ever called from an explicit user action.
 #[tauri::command(async)]
-pub fn delete_nodes(ids: Vec<NodeId>, mode: String, state: State<'_, AppState>) -> Result<Vec<DeleteResult>, String> {
+pub fn delete_nodes(
+    ids: Vec<NodeId>,
+    mode: String,
+    tree_id: u64,
+    state: State<'_, AppState>,
+) -> Result<Vec<DeleteResult>, String> {
     let mode = parse_mode(&mode)?;
     let mut guard = state.tree.write().map_err(|_| "internal state is poisoned".to_string())?;
     let tree = guard.as_mut().ok_or(NO_TREE)?;
+    check_tree(tree, tree_id)?;
     Ok(delete(tree, &ids, mode).iter().map(delete_result).collect())
 }
 
@@ -264,12 +286,21 @@ mod tests {
         assert_eq!(kind(DeleteError::NotFound), "notFound");
         assert_eq!(kind(DeleteError::Refused("mount".into())), "refused");
         assert_eq!(kind(DeleteError::TrashUnavailable("no trash".into())), "trashUnavailable");
+        assert_eq!(kind(DeleteError::Partial("stopped".into())), "partial");
         assert_eq!(kind(DeleteError::Io("denied".into())), "io");
 
         let ok = delete_result(&DeleteOutcome { id: 3, result: Ok(8192) });
         assert!(ok.ok && ok.error.is_none());
         assert_eq!(ok.freed, 8192);
         assert!(serde_json::to_string(&ok).unwrap().contains("\"error\":null"));
+    }
+
+    #[test]
+    fn a_selection_from_another_tree_is_rejected() {
+        let (first, second) = (tree("/r", false), tree("/r", false));
+        assert!(check_tree(&first, first.token()).is_ok());
+        assert!(check_tree(&second, first.token()).is_err());
+        assert!(check_tree(&first, 0).is_err());
     }
 
     #[test]

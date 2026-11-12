@@ -27,11 +27,29 @@ pub struct NodeDto {
     pub hardlink_dup: bool,
 }
 
+/// A path as people expect to read it. On Windows the tree holds `\\?\`
+/// ("verbatim") paths so the system cannot rewrite odd names; that prefix is
+/// noise to a person and unknown to the file manager.
+pub fn display_path(path: &std::path::Path) -> String {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        text.into_owned()
+    }
+}
+
 pub fn node_dto(tree: &Tree, id: NodeId) -> Option<NodeDto> {
     let n = tree.node(id)?;
     Some(NodeDto {
         id,
-        name: n.name.to_string_lossy().into_owned(),
+        // The root is labelled with its full path.
+        name: match n.parent {
+            Some(_) => n.name.to_string_lossy().into_owned(),
+            None => display_path(&tree.path(id)),
+        },
         kind: match n.kind {
             NodeKind::Dir => "dir",
             NodeKind::File => "file",
@@ -115,6 +133,9 @@ pub struct Summary {
     /// True for a tree imported from a file: nothing in it may be deleted or revealed.
     pub read_only: bool,
     pub root_path: String,
+    /// Identifies this tree. Sent back with a delete so that a selection made
+    /// in one tree can never be applied to another.
+    pub tree_id: u64,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -180,6 +201,15 @@ mod tests {
         let dto = node_dto(&t, id).unwrap();
         assert_eq!(dto.name, "bad\u{fffd}name");
         serde_json::to_string(&dto).unwrap();
+    }
+
+    #[test]
+    fn display_path_strips_the_windows_verbatim_prefix() {
+        use std::path::Path;
+        assert_eq!(display_path(Path::new(r"\\?\C:\Users\me")), r"C:\Users\me");
+        assert_eq!(display_path(Path::new(r"\\?\UNC\server\share\x")), r"\\server\share\x");
+        assert_eq!(display_path(Path::new("/Users/me")), "/Users/me");
+        assert_eq!(display_path(Path::new(r"C:\plain")), r"C:\plain");
     }
 
     #[test]

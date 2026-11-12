@@ -6,6 +6,9 @@
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 /// Index of a node inside its [`Tree`].
 pub type NodeId = u32;
@@ -95,6 +98,7 @@ pub struct Tree {
     root_path: PathBuf,
     read_only: bool,
     unreadable: u64,
+    token: u64,
 }
 
 impl Tree {
@@ -106,6 +110,7 @@ impl Tree {
             root_path,
             read_only,
             unreadable: 0,
+            token: NEXT_TOKEN.fetch_add(1, Ordering::Relaxed),
         };
         tree.root = tree.push(None, root);
         tree
@@ -113,6 +118,13 @@ impl Tree {
 
     pub fn root(&self) -> NodeId {
         self.root
+    }
+
+    /// A number unique to this tree within the process. Node ids mean nothing
+    /// outside their tree; callers pass the token back to prove which tree a
+    /// selection was made in.
+    pub fn token(&self) -> u64 {
+        self.token
     }
 
     /// Imported trees are view-only: nothing in them may be deleted or revealed.

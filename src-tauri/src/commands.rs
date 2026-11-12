@@ -1,7 +1,7 @@
 //! Commands for scanning and browsing. The logic lives in plain functions
 //! over a `Tree` so it can be tested without a window.
 
-use crate::dto::{node_dto, NodeDto, ProgressDto, RectDto, ScanFailed, ScanFinished, Summary, VolumeDto};
+use crate::dto::{display_path, node_dto, NodeDto, ProgressDto, RectDto, ScanFailed, ScanFinished, Summary, VolumeDto};
 use crate::state::{AppState, NO_TREE};
 use diskscape_core::scan::{scan, CancelToken, ScanError, ScanOptions};
 use diskscape_core::tree::{NodeId, SortKey, Tree};
@@ -43,7 +43,8 @@ pub fn summary(tree: &Tree, elapsed_ms: u64) -> Summary {
         total_dsize: tree.node(tree.root()).map_or(0, |n| n.dsize),
         elapsed_ms,
         read_only: tree.read_only(),
-        root_path: tree.path(tree.root()).to_string_lossy().into_owned(),
+        root_path: display_path(&tree.path(tree.root())),
+        tree_id: tree.token(),
     }
 }
 
@@ -169,7 +170,7 @@ pub fn get_ancestors(id: NodeId, state: State<'_, AppState>) -> Result<Vec<NodeD
 
 #[tauri::command(async)]
 pub fn get_path(id: NodeId, state: State<'_, AppState>) -> Result<String, String> {
-    with_tree(&state, |t| t.path(id).to_string_lossy().into_owned())
+    with_tree(&state, |t| display_path(&t.path(id)))
 }
 
 #[tauri::command(async)]
@@ -268,6 +269,8 @@ mod tests {
         let s = summary(&t, 1234);
         assert_eq!((s.unreadable_dirs, s.total_dsize, s.elapsed_ms, s.read_only), (0, 9812, 1234, false));
         assert_eq!(s.root_path, "/r");
+        assert_eq!(s.tree_id, t.token());
+        assert_ne!(summary(&tree(), 0).tree_id, s.tree_id);
         assert!(serde_json::to_string(&s).unwrap().contains("\"unreadableDirs\""));
     }
 

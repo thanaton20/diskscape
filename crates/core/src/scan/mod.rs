@@ -78,6 +78,8 @@ struct Batch {
 
 struct Walker {
     root: PathBuf,
+    /// Directories to record but not enter.
+    skips: Vec<PathBuf>,
     allowed_devs: Vec<u64>,
     cancel: CancelToken,
     next_key: AtomicU64,
@@ -106,7 +108,12 @@ impl Walker {
                     };
                     let name = item.file_name();
                     let child = path.join(&name);
-                    if meta::skip_path(&self.root, &child) {
+                    if meta::skip_path(&self.root, &child) || self.skips.contains(&child) {
+                        // Reached another way, or deliberately left out: keep a
+                        // marker so the folder does not look like an ordinary empty one.
+                        let mut marker = Entry::new(name, NodeKind::Dir, 0, 0);
+                        marker.other_fs = true;
+                        entries.push((marker, None));
                         continue;
                     }
                     let mut entry = match meta::read_entry(&child, &name) {
@@ -154,10 +161,24 @@ pub fn scan(
     cancel: &CancelToken,
     on_progress: &(dyn Fn(&Progress) + Sync),
 ) -> Result<Tree, ScanError> {
+    scan_skipping(opts, cancel, on_progress, Vec::new())
+}
+
+/// [`scan`], with extra directories that are recorded but not entered.
+pub(crate) fn scan_skipping(
+    opts: &ScanOptions,
+    cancel: &CancelToken,
+    on_progress: &(dyn Fn(&Progress) + Sync),
+    skips: Vec<PathBuf>,
+) -> Result<Tree, ScanError> {
     if cancel.is_cancelled() {
         return Err(ScanError::Cancelled);
     }
-    let root_path = std::path::absolute(&opts.root).unwrap_or_else(|_| opts.root.clone());
+    // Resolve every symbolic link in the root once, now. All paths in the tree
+    // are then real paths, which is what lets a later delete notice that a
+    // directory was swapped for a link. (On Windows this also yields the
+    // `\\?\` form, which the Win32 layer does not rewrite.)
+    let root_path = std::fs::canonicalize(&opts.root).map_err(ScanError::RootUnreadable)?;
     let root_entry = meta::read_root(&root_path, root_path.as_os_str())
         .map_err(ScanError::RootUnreadable)?;
     let root_is_dir = root_entry.kind == NodeKind::Dir;
@@ -176,6 +197,7 @@ pub fn scan(
         let walker = Walker {
             allowed_devs: meta::allowed_devs(&root_path, root_dev),
             root: root_path.clone(),
+            skips,
             cancel: cancel.clone(),
             next_key: AtomicU64::new(1),
             tx,
@@ -298,7 +320,8 @@ mod tests {
         let tmp = sample();
         let t = run(tmp.path());
         let b = find(&t, "sub/.hidden/b.bin").unwrap();
-        assert_eq!(t.path(b), tmp.path().join("sub/.hidden/b.bin"));
+        // tree paths are fully resolved, so they can be compared with the disk later
+        assert_eq!(t.path(b), tmp.path().canonicalize().unwrap().join("sub/.hidden/b.bin"));
         assert!(t.path(b).exists());
         assert!(!t.read_only());
     }
@@ -397,6 +420,25 @@ mod tests {
         assert_eq!(root.kind, NodeKind::File);
         assert_eq!(root.own_asize, 5);
         assert!(root.children.is_empty());
+    }
+
+    #[test]
+    fn skipped_paths_are_recorded_as_another_filesystem() {
+        let tmp = sample();
+        let root = tmp.path().canonicalize().unwrap();
+        let opts = ScanOptions { root: root.clone(), threads: 2 };
+        let t = scan_skipping(&opts, &CancelToken::default(), &|_| {}, vec![root.join("sub")]).unwrap();
+        let sub = t.node(find(&t, "sub").unwrap()).unwrap();
+        assert_eq!(sub.kind, NodeKind::Dir);
+        assert!(sub.flags.other_fs);
+        assert!(sub.children.is_empty());
+        assert_eq!(t.node(t.root()).unwrap().items, 2);
+    }
+
+    #[test]
+    fn every_tree_has_its_own_token() {
+        let tmp = sample();
+        assert_ne!(run(tmp.path()).token(), run(tmp.path()).token());
     }
 
     #[test]
