@@ -1,6 +1,7 @@
 // Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod actions;
 mod commands;
 mod dto;
 mod state;
@@ -22,6 +23,10 @@ fn main() {
             commands::get_summary,
             commands::import_ncdu,
             commands::export_ncdu,
+            actions::get_selection_info,
+            actions::delete_nodes,
+            actions::reveal,
+            actions::request_elevation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Diskscape");
