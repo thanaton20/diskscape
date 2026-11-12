@@ -1,6 +1,6 @@
 export type Action = 'trash' | 'permanent' | 'copyPath';
 
-type Keys = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'altKey' | 'metaKey' | 'ctrlKey'>;
+type Keys = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'altKey' | 'metaKey' | 'ctrlKey'> & { code?: string };
 
 /**
  * Which action a key press asks for, if any.
@@ -25,7 +25,10 @@ export function matchShortcut(e: Keys, isMac: boolean): Action | null {
     if (only(false, true, true, false)) return 'permanent';
     return null;
   }
-  if (e.key.toLowerCase() === 'c') {
+  // The letter C — or, on a layout with no Latin letters (Russian reports "с"),
+  // the key in C's position.
+  const letter = e.key.toLowerCase();
+  if (letter === 'c' || (!/^[a-z]$/.test(letter) && e.code === 'KeyC')) {
     return (isMac ? only(false, false, true, false) : only(false, false, false, true)) ? 'copyPath' : null;
   }
   return null;

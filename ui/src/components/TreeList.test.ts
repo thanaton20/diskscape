@@ -108,6 +108,17 @@ describe('TreeList', () => {
     expect(model.rows.some((r) => r.node.id === 9)).toBe(false);
   });
 
+  test('collapsing a folder drops the selection hidden inside it', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = await setup([9, 1]);
+    await user.click(within(row('sub')).getByRole('button', { name: 'Expand' }));
+    await screen.findByRole('row', { name: /inner/ });
+    onSelect.mockClear();
+    await user.click(within(row('sub')).getByRole('button', { name: 'Collapse' }));
+    // `inner` (9) is no longer on screen, so it must not stay selected
+    expect(onSelect).toHaveBeenLastCalledWith([1]);
+  });
+
   test('double click opens a file and toggles a folder', async () => {
     const user = userEvent.setup();
     const { onOpen } = await setup();

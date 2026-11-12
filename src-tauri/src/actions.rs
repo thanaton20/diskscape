@@ -106,9 +106,21 @@ pub fn reveal_path(tree: &Tree, id: NodeId) -> Result<PathBuf, String> {
         .ok_or_else(|| "the object is no longer in the list".into())
 }
 
+/// What to start again with more rights. Inside an AppImage the running
+/// binary lives in a per-user mount that root cannot read, so the AppImage
+/// file itself (which the runtime names in `APPIMAGE`) is started instead.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn elevated_executable(appimage: Option<String>, current: &Path) -> PathBuf {
+    match appimage {
+        Some(path) if !path.is_empty() => PathBuf::from(path),
+        _ => current.to_path_buf(),
+    }
+}
+
 /// `pkexec env VAR=… <exe>`: a root process started by pkexec gets a clean
 /// environment, so the variables a GUI needs to reach the display are passed
 /// through explicitly.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn pkexec_command(exe: &Path, env: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
     let mut cmd = vec!["pkexec".to_string(), "env".to_string()];
     for var in ["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR"] {
@@ -208,7 +220,8 @@ fn elevate(app: &AppHandle) -> Result<(), String> {
 fn elevate(app: &AppHandle) -> Result<(), String> {
     use tauri::Manager;
 
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let current = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = elevated_executable(std::env::var("APPIMAGE").ok(), &current);
     let cmd = pkexec_command(&exe, &|name| std::env::var(name).ok());
     let mut child = std::process::Command::new(&cmd[0])
         .args(&cmd[1..])
@@ -335,6 +348,14 @@ mod tests {
             assert!(cmd.iter().any(|a| a == var), "{var} missing in {cmd:?}");
         }
         assert_eq!(cmd.last().unwrap(), "/opt/diskscape/diskscape");
+
+        // inside an AppImage the running binary sits in a mount root cannot read
+        assert_eq!(
+            elevated_executable(Some("/home/me/Diskscape.AppImage".into()), Path::new("/tmp/.mount_x/usr/bin/diskscape")),
+            PathBuf::from("/home/me/Diskscape.AppImage")
+        );
+        assert_eq!(elevated_executable(None, Path::new("/usr/bin/diskscape")), PathBuf::from("/usr/bin/diskscape"));
+        assert_eq!(elevated_executable(Some(String::new()), Path::new("/usr/bin/diskscape")), PathBuf::from("/usr/bin/diskscape"));
 
         // variables that are not set are not passed as empty values
         let cmd = pkexec_command(Path::new("/x"), &|_| None);

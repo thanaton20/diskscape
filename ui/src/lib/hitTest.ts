@@ -11,3 +11,15 @@ export function hitTest(rects: RectDto[], x: number, y: number): RectDto | null 
   }
   return null;
 }
+
+/**
+ * The outermost folder block under a point, or `null`. A folder's contents
+ * cover it edge to edge, so a double click meant for the folder almost always
+ * lands on a file inside it; this finds the folder to enter regardless.
+ */
+export function hitTestFolder(rects: RectDto[], x: number, y: number): RectDto | null {
+  for (const r of rects) {
+    if (r.isDir && r.id !== null && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return r;
+  }
+  return null;
+}

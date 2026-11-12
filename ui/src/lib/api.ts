@@ -1,6 +1,7 @@
 // Thin wrappers over the Tauri commands and events; the only file that talks to the backend.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import type {
   DeleteMode, DeleteResult, NodeDto, ProgressDto, RectDto, SelectionInfo, SortKey, Summary,
@@ -28,6 +29,8 @@ export const selectionInfo = (ids: number[]) =>
 export const deleteNodes = (ids: number[], mode: DeleteMode, treeId: number) =>
   invoke<DeleteResult[]>('delete_nodes', { ids, mode, treeId });
 export const reveal = (id: number) => invoke<void>('reveal', { id });
+/** Puts text on the clipboard through the backend; the webview's own clipboard API is unreliable. */
+export const copyText = (text: string) => writeText(text);
 export const requestElevation = () => invoke<void>('request_elevation');
 
 const single = (picked: string | string[] | null): string | null =>

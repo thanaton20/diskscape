@@ -40,7 +40,9 @@ Signing needs paid developer certificates, which this project does not have,
 so the operating system will warn you the first time:
 
 - **macOS:** open the app once, dismiss the warning, then go to
-  *System Settings → Privacy & Security* and choose *Open Anyway*.
+  *System Settings → Privacy & Security* and choose *Open Anyway*. If macOS
+  says the app is damaged instead, clear the download flag and open it again:
+  `xattr -dr com.apple.quarantine /Applications/Diskscape.app`
 - **Windows:** in the SmartScreen dialog choose *More info → Run anyway*.
 
 If you would rather not trust a download, build it yourself — see below.

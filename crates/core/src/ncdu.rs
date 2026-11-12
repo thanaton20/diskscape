@@ -634,7 +634,15 @@ mod tests {
         let out = export_string(&t);
         assert!(out.contains(r#"we\"ird\n\\name\tф"#));
         let back = import_str(&out).unwrap();
-        assert!(snapshot(&back).iter().any(|r| r.0 == "/r/we\"ird\n\\name\tф"));
+        // compare the name, not the joined path: the separator differs by platform
+        let names: Vec<_> = back
+            .node(back.root())
+            .unwrap()
+            .children
+            .iter()
+            .map(|c| back.node(*c).unwrap().name.clone())
+            .collect();
+        assert!(names.iter().any(|n| n == "we\"ird\n\\name\tф"));
     }
 
     #[test]

@@ -172,7 +172,7 @@ fn delete_one(tree: &mut Tree, id: NodeId, mode: DeleteMode, hooks: &Hooks) -> R
 
     match mode {
         DeleteMode::Trash => {
-            check_trashable(&path)?;
+            check_trashable(&path, &metadata)?;
             (hooks.trash)(&path).map_err(DeleteError::TrashUnavailable)?;
         }
         DeleteMode::Permanent => {
@@ -361,12 +361,26 @@ fn remove_from_disk(path: &Path, metadata: &Metadata) -> io::Result<()> {
 }
 
 /// Names the system Trash would mishandle are turned away before it is asked.
-fn check_trashable(path: &Path) -> Result<(), DeleteError> {
+fn check_trashable(path: &Path, metadata: &Metadata) -> Result<(), DeleteError> {
     #[cfg(windows)]
-    if path.file_name().is_some_and(|name| win32_renames(&name.to_string_lossy())) {
-        return Err(DeleteError::Refused(
-            "Windows cannot move a name like this to the Recycle Bin without changing it".into(),
-        ));
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        // Junctions, directory symlinks and volume mount points. The Recycle
+        // Bin goes through the shell, which may walk into what they point at;
+        // deleting permanently removes only the link itself.
+        let attributes = metadata.file_attributes();
+        if attributes & FILE_ATTRIBUTE_DIRECTORY != 0 && attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(DeleteError::Refused(
+                "a folder link or mount point cannot go to the Recycle Bin safely".into(),
+            ));
+        }
+        if path.file_name().is_some_and(|name| win32_renames(&name.to_string_lossy())) {
+            return Err(DeleteError::Refused(
+                "Windows cannot move a name like this to the Recycle Bin without changing it".into(),
+            ));
+        }
     }
     #[cfg(target_os = "macos")]
     if path.to_str().is_none() {
@@ -374,7 +388,7 @@ fn check_trashable(path: &Path) -> Result<(), DeleteError> {
             "the name is not valid UTF-8, which the macOS Trash cannot handle".into(),
         ));
     }
-    let _ = path;
+    let _ = (path, metadata);
     Ok(())
 }
 
@@ -790,6 +804,7 @@ mod tests {
 mod stale_tree_tests {
     use super::tests::{find, sample, scanned};
     use super::*;
+    use crate::tree::NodeId;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -811,8 +826,11 @@ mod stale_tree_tests {
             if path.ends_with("sub/deep") { 999_999 } else { real_device(path, md) }
         };
         let hooks = Hooks { trash: &real_trash, device_of: &fake_device, mount_points: &no_mounts };
+        // Selecting the new mount point itself is caught by the identity check,
+        // which needs device ids and so exists only on Unix.
+        let targets: &[NodeId] = if cfg!(unix) { &[sub, deep] } else { &[sub] };
         for mode in [DeleteMode::Permanent, DeleteMode::Trash] {
-            for id in [sub, deep] {
+            for &id in targets {
                 let out = delete_with_hooks(&mut t, &[id], mode, &hooks);
                 assert!(matches!(out[0].result, Err(DeleteError::Refused(_))), "{:?}", out[0].result);
             }

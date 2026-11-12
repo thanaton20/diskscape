@@ -7,10 +7,14 @@
   interface Props {
     /** What is about to be deleted for good. */
     info: SelectionInfo;
+    /** The first few paths, so the dialog names what it is about. */
+    paths: string[];
+    /** How many more are selected beyond `paths`. */
+    more: number;
     onConfirm: () => void;
     onCancel: () => void;
   }
-  let { info, onConfirm, onCancel }: Props = $props();
+  let { info, paths, more, onConfirm, onCancel }: Props = $props();
 
   const locale = getLocale();
   let cancelButton = $state<HTMLButtonElement>();
@@ -39,6 +43,12 @@
     <p id="delete-body">
       {t('dialog.body', { count: info.count, size: formatSize(info.dsize, locale) })}
     </p>
+    {#if paths.length > 0}
+      <ul class="paths mono">
+        {#each paths as path}<li>{path}</li>{/each}
+        {#if more > 0}<li class="more">{t('dialog.more', { n: more })}</li>{/if}
+      </ul>
+    {/if}
     {#if info.hasSystemPath}
       <p class="warning">{t('dialog.system')}</p>
     {/if}
@@ -73,6 +83,20 @@
   }
   p {
     margin: 0 0 10px;
+  }
+  .paths {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    list-style: none;
+    max-height: 120px;
+    overflow: auto;
+    border-radius: 8px;
+    background: var(--panel-2);
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .more {
+    color: var(--muted);
   }
   .warning {
     padding: 9px 11px;

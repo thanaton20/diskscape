@@ -5,7 +5,7 @@ import Result from './Result.svelte';
 import * as api from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { dir, mockLayout, node } from '../lib/testing';
-import type { DeleteResult, NodeDto, Summary } from '../lib/types';
+import type { DeleteResult, NodeDto, SelectionInfo, Summary } from '../lib/types';
 
 vi.mock('../lib/api');
 
@@ -77,7 +77,7 @@ describe('Result actions', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     await waitFor(() => expect(api.getTreemap).toHaveBeenCalledTimes(2));
     expect(api.getSummary).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText('Moved to Trash — items: 1, freed: 100.0 KB')).toBeInTheDocument();
+    expect(await screen.findByText('Moved to Trash — items: 1, 100.0 KB')).toBeInTheDocument();
     // the selection is cleared afterwards
     await waitFor(() => expect(screen.queryByText(/^Selected:/)).not.toBeInTheDocument());
   });
@@ -110,6 +110,51 @@ describe('Result actions', () => {
     await waitFor(() => expect(api.deleteNodes).toHaveBeenCalledWith([1, 2], 'permanent', 7));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(await screen.findByText(/^Deleted permanently — items: 2/)).toBeInTheDocument();
+  });
+
+  test('the dialog deletes exactly what it described, even if the selection changes while it opens', async () => {
+    mount();
+    await userEvent.click(await row('a\\.bin'));
+    let answer!: (info: SelectionInfo) => void;
+    vi.mocked(api.selectionInfo).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    await userEvent.keyboard('{Shift>}{Delete}{/Shift}');
+    // the backend is slow; meanwhile the user clicks another row
+    await userEvent.click(await row('b\\.bin'));
+    answer({ count: 1, dsize: 400 * KB, hasSystemPath: false });
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('/r/a.bin');
+    expect(dialog).not.toHaveTextContent('/r/b.bin');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete permanently' }));
+    await waitFor(() => expect(api.deleteNodes).toHaveBeenCalledWith([1], 'permanent', 7));
+    expect(api.deleteNodes).toHaveBeenCalledTimes(1);
+  });
+
+  test('the dialog names what will be deleted, up to five paths', async () => {
+    mount();
+    const user = userEvent.setup();
+    await user.click(await row('a\\.bin'));
+    await user.keyboard('{Shift>}');
+    await user.click(await row('sub'));
+    await user.keyboard('{/Shift}');
+    await user.keyboard('{Shift>}{Delete}{/Shift}');
+    const dialog = await screen.findByRole('alertdialog');
+    for (const path of ['/r/a.bin', '/r/b.bin', '/r/sub']) expect(dialog).toHaveTextContent(path);
+    expect(dialog).not.toHaveTextContent('more');
+  });
+
+  test('while a delete is running, further delete requests are ignored', async () => {
+    mount();
+    let finish!: (results: DeleteResult[]) => void;
+    vi.mocked(api.deleteNodes).mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    await userEvent.click(await row('a\\.bin'));
+    await userEvent.keyboard('{Delete}');
+    await waitFor(() => expect(api.deleteNodes).toHaveBeenCalledTimes(1));
+    await userEvent.keyboard('{Delete}');
+    await userEvent.keyboard('{Shift>}{Delete}{/Shift}');
+    expect(api.deleteNodes).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    finish([okResult(1, 400 * KB)]);
+    expect(await screen.findByText(/^Moved to Trash/)).toBeInTheDocument();
   });
 
   test('dialog focuses Cancel by default; Enter does not confirm; Escape cancels', async () => {
@@ -160,7 +205,7 @@ describe('Result actions', () => {
     expect(alert).toHaveTextContent('Permission denied');
     expect(alert).toHaveTextContent('/r/sub');
     expect(alert).toHaveTextContent('changed on disk since the scan');
-    expect(await screen.findByText('Moved to Trash — items: 1, freed: 400.0 KB')).toBeInTheDocument();
+    expect(await screen.findByText('Moved to Trash — items: 1, 400.0 KB')).toBeInTheDocument();
   });
 
   test('a trashUnavailable error never triggers a permanent delete', async () => {
@@ -252,7 +297,8 @@ describe('Result actions', () => {
   test('copy path puts the paths on the clipboard', async () => {
     mount();
     await userEvent.click(within(await openMenu('a\\.bin')).getByRole('menuitem', { name: 'Copy path' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('/r/a.bin'));
+    await waitFor(() => expect(api.copyText).toHaveBeenCalledWith('/r/a.bin'));
+    expect(writeText).not.toHaveBeenCalled();
     expect(await screen.findByText('Path copied')).toBeInTheDocument();
   });
 

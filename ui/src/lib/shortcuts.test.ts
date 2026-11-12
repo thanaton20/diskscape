@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { matchShortcut } from './shortcuts';
 
-const key = (k: string, mods: Partial<Record<'shiftKey' | 'altKey' | 'metaKey' | 'ctrlKey', boolean>> = {}) =>
-  ({ key: k, shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, ...mods });
+const key = (
+  k: string,
+  mods: Partial<Record<'shiftKey' | 'altKey' | 'metaKey' | 'ctrlKey', boolean>> = {},
+  code?: string,
+) => ({ key: k, code, shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, ...mods });
 
 describe('matchShortcut', () => {
   test('Delete moves to the Trash on every platform', () => {
@@ -29,6 +32,14 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('c', { metaKey: true }), true)).toBe('copyPath');
     expect(matchShortcut(key('c', { ctrlKey: true }), true)).toBeNull();
     expect(matchShortcut(key('c'), false)).toBeNull();
+  });
+
+  test('copy path works on a non-Latin keyboard layout', () => {
+    // On a Russian layout the C key reports the Cyrillic letter "с".
+    expect(matchShortcut(key('с', { ctrlKey: true }, 'KeyC'), false)).toBe('copyPath');
+    expect(matchShortcut(key('с', { metaKey: true }, 'KeyC'), true)).toBe('copyPath');
+    expect(matchShortcut(key('с', {}, 'KeyC'), false)).toBeNull();
+    expect(matchShortcut(key('м', { ctrlKey: true }, 'KeyV'), false)).toBeNull();
   });
 
   test('anything else, and near misses, do nothing', () => {

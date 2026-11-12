@@ -30,6 +30,10 @@ pub const MIN_PX: f32 = 3.0;
 /// Upper bound on the number of rectangles returned.
 pub const MAX_RECTS: usize = 5000;
 
+/// Upper bound on the blocks one folder may contribute, so that a single huge
+/// folder cannot use up the whole budget and leave its siblings undrawn.
+const MAX_PER_CONTAINER: usize = 2000;
+
 /// Gap between a directory's frame and its contents.
 const INSET: f64 = 1.0;
 
@@ -62,14 +66,29 @@ pub fn layout(tree: &Tree, dir: NodeId, width: f32, height: f32) -> Vec<Rect> {
             continue;
         }
 
-        // Everything too small to see becomes one trailing aggregate block.
+        // Out of budget: this folder stays a plain frame rather than being
+        // filled half-way.
+        let allowed = MAX_RECTS.saturating_sub(rects.len()).min(MAX_PER_CONTAINER);
+        if allowed == 0 {
+            continue;
+        }
+
+        // Everything too small to see becomes one trailing aggregate block —
+        // and so does whatever exceeds the budget. A folder is therefore always
+        // tiled edge to edge; nothing is ever left blank.
         let scale = area.w * area.h / total;
         let min_area = f64::from(MIN_PX * MIN_PX);
-        let visible = kids.partition_point(|(_, size)| size * scale >= min_area);
+        let mut visible = kids.partition_point(|(_, size)| size * scale >= min_area);
+        let tail: f64 = kids[visible..].iter().map(|(_, size)| size).sum();
+        let wanted = visible + usize::from(tail * scale >= min_area);
+        let over_budget = wanted > allowed;
+        if over_budget {
+            visible = allowed - 1;
+        }
         let rest: f64 = kids[visible..].iter().map(|(_, size)| size).sum();
         let mut items: Vec<(Option<NodeId>, f64)> =
             kids[..visible].iter().map(|(id, size)| (Some(*id), size * scale)).collect();
-        if rest * scale >= min_area {
+        if rest > 0.0 && (over_budget || rest * scale >= min_area) {
             // Keep the list sorted by area so the squarify rows stay well-shaped.
             let at = items.partition_point(|(_, a)| *a >= rest * scale);
             items.insert(at, (None, rest * scale));
@@ -314,6 +333,51 @@ mod tests {
         assert!(r.len() <= MAX_RECTS);
         assert!(r.len() > 1000);
         assert!(all_finite(&r));
+    }
+
+    #[test]
+    fn large_folder_is_fully_tiled_within_the_budget() {
+        // 20 000 equal files would each get a visible 35 px² block, far more than the budget.
+        let mut t = new_tree();
+        let root = t.root();
+        for i in 0..20_000 {
+            file(&mut t, root, &format!("f{i}"), 4096);
+        }
+        t.finalize();
+        let (w, h) = (1000.0, 700.0);
+        let r = layout(&t, root, w, h);
+        assert!(r.len() <= MAX_RECTS);
+        assert!(all_finite(&r));
+        let covered: f32 = r.iter().map(area).sum();
+        assert!(covered >= 0.99 * w * h, "only {covered} of {} px² drawn", w * h);
+        // what did not fit is one "small items" block, not a blank
+        assert_eq!(r.iter().filter(|x| x.id.is_none()).count(), 1);
+    }
+
+    #[test]
+    fn nested_large_folders_are_tiled_or_left_as_plain_frames() {
+        let mut t = new_tree();
+        let root = t.root();
+        for d in 0..3 {
+            let sub = dir(&mut t, root, &format!("d{d}"));
+            for i in 0..4000 {
+                file(&mut t, sub, &format!("f{i}"), 4096);
+            }
+        }
+        t.finalize();
+        let (w, h) = (1000.0, 700.0);
+        let r = layout(&t, root, w, h);
+        assert!(r.len() <= MAX_RECTS);
+        let top: Vec<&Rect> = r.iter().filter(|x| x.depth == 0).collect();
+        assert_eq!(top.len(), 3);
+        let covered: f32 = top.iter().map(|x| area(x)).sum();
+        assert!(covered >= 0.99 * w * h);
+        for folder in top {
+            let inside: f32 = r.iter().filter(|x| x.depth == 1 && inside(x, folder)).map(area).sum();
+            let interior = (folder.w - 2.0) * (folder.h - 2.0);
+            // a folder is either filled edge to edge or not entered at all
+            assert!(inside == 0.0 || inside >= 0.98 * interior, "{inside} of {interior} px² drawn");
+        }
     }
 
     #[test]

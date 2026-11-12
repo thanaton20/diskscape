@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import * as api from '../lib/api';
   import { formatSize } from '../lib/format';
-  import { hitTest } from '../lib/hitTest';
+  import { hitTest, hitTestFolder } from '../lib/hitTest';
   import { getLocale, t } from '../lib/i18n';
   import { categoryColor, folderColor, gapColor, type Theme } from '../lib/palette';
   import type { RectDto } from '../lib/types';
@@ -151,8 +151,9 @@
   }
 
   function doubleClick(event: MouseEvent) {
-    const { hit } = at(event);
-    if (hit && hit.id !== null && hit.isDir) onEnter(hit.id);
+    const { x, y } = at(event);
+    const folder = hitTestFolder(rects, x, y);
+    if (folder && folder.id !== null) onEnter(folder.id);
   }
 
   async function move(event: MouseEvent) {

@@ -42,8 +42,15 @@
   }
 
   function toggle(row: Row) {
-    if (row.expanded) model.collapse(row.node.id);
+    if (row.expanded) collapse(row);
     else void model.expand(row.node.id);
+  }
+
+  /** Collapses a folder and deselects anything it hides: what cannot be seen must not be acted on. */
+  function collapse(row: Row) {
+    model.collapse(row.node.id);
+    const stillShown = selected.filter((id) => model.indexOf(id) >= 0);
+    if (stillShown.length !== selected.length) onSelect(stillShown);
   }
 
   function click(event: MouseEvent, row: Row, index: number) {
@@ -95,7 +102,7 @@
       case 'ArrowDown': move(current + 1); break;
       case 'ArrowUp': move(current - 1); break;
       case 'ArrowRight': if (row && !row.expanded) void model.expand(row.node.id); break;
-      case 'ArrowLeft': if (row?.expanded) model.collapse(row.node.id); break;
+      case 'ArrowLeft': if (row?.expanded) collapse(row); break;
       case 'Enter': if (row) doubleClick(row); break;
       default: return;
     }

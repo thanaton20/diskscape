@@ -45,8 +45,15 @@
   const INFO_TOAST_MS = 5000;
   const locale = getLocale();
   let menu = $state<{ x: number; y: number } | null>(null);
-  /** Set while the "delete permanently?" dialog is open. */
-  let confirming = $state<SelectionInfo | null>(null);
+  const DIALOG_PATHS = 5;
+  /**
+   * Set while the "delete permanently?" dialog is open. It carries the ids the
+   * dialog describes: confirming deletes exactly those, whatever the selection
+   * has become in the meantime.
+   */
+  let confirming = $state<{ ids: number[]; info: SelectionInfo; paths: string[] } | null>(null);
+  /** True while a delete is running; further actions wait for it. */
+  let busy = false;
   let toasts = $state<Toast[]>([]);
   let nextToast = 0;
   /** Deleting and revealing need a tree scanned on this machine, and its id. */
@@ -88,30 +95,45 @@
   /** Every action on the selection starts here, and only from something the user did. */
   async function act(action: MenuAction) {
     menu = null;
-    if (selected.length === 0) return;
+    // What is selected right now is what the action is about; the selection
+    // may change while the backend answers.
+    const ids = [...selected];
+    if (ids.length === 0 || busy) return;
     try {
       if (action === 'copyPath') {
-        const paths = await Promise.all(selected.map((id) => api.getPath(id)));
-        await navigator.clipboard.writeText(paths.join('\n'));
+        const paths = await Promise.all(ids.map((id) => api.getPath(id)));
+        await api.copyText(paths.join('\n'));
         toast(false, t('toast.copied'));
       } else if (!canModify) {
         return;
       } else if (action === 'reveal') {
-        if (selected.length === 1) await api.reveal(selected[0]);
+        if (ids.length === 1) await api.reveal(ids[0]);
       } else if (action === 'trash') {
-        await remove('trash');
+        await remove('trash', ids);
       } else {
         // Permanent deletion always goes through the confirmation dialog.
-        confirming = await api.selectionInfo(selected);
+        const [info, paths] = await Promise.all([
+          api.selectionInfo(ids),
+          Promise.all(ids.slice(0, DIALOG_PATHS).map((id) => api.getPath(id))),
+        ]);
+        confirming = { ids, info, paths };
       }
     } catch (e) {
       failure(e);
     }
   }
 
-  async function remove(mode: DeleteMode) {
-    if (!summary || selected.length === 0) return;
-    const ids = [...selected];
+  async function remove(mode: DeleteMode, ids: number[]) {
+    if (!summary || ids.length === 0 || busy) return;
+    busy = true;
+    try {
+      await removeNow(mode, ids, summary.treeId);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function removeNow(mode: DeleteMode, ids: number[], treeId: number) {
     // Paths are looked up first: a deleted node can no longer be asked for its path.
     const paths = new Map<number, string>();
     try {
@@ -123,7 +145,7 @@
 
     let results: DeleteResult[];
     try {
-      results = await api.deleteNodes(ids, mode, summary.treeId);
+      results = await api.deleteNodes(ids, mode, treeId);
     } catch (e) {
       failure(e);
       return;
@@ -277,9 +299,15 @@
 
   {#if confirming}
     <DeleteDialog
-      info={confirming}
+      info={confirming.info}
+      paths={confirming.paths}
+      more={confirming.ids.length - confirming.paths.length}
       onCancel={() => (confirming = null)}
-      onConfirm={() => { confirming = null; void remove('permanent'); }}
+      onConfirm={() => {
+        const ids = confirming?.ids ?? [];
+        confirming = null;
+        void remove('permanent', ids);
+      }}
     />
   {/if}
 

@@ -96,9 +96,14 @@ describe('Treemap', () => {
     await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
     await fireEvent.dblClick(canvas(), { clientX: 300, clientY: 400 });
     expect(onEnter).toHaveBeenCalledWith(2);
+    // In real layouts a folder's contents cover it completely, so the double
+    // click almost always lands on a file inside: that enters the folder too.
+    await fireEvent.dblClick(canvas(), { clientX: 50, clientY: 50 });
+    expect(onEnter).toHaveBeenCalledTimes(2);
+    expect(onEnter).toHaveBeenLastCalledWith(2);
     await fireEvent.dblClick(canvas(), { clientX: 600, clientY: 100 });
     await fireEvent.dblClick(canvas(), { clientX: 600, clientY: 450 });
-    expect(onEnter).toHaveBeenCalledTimes(1);
+    expect(onEnter).toHaveBeenCalledTimes(2);
   });
 
   test('hover shows a tooltip with the path and size', async () => {
