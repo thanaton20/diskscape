@@ -3,3 +3,4 @@ node_modules/
 dist/
 .notes/
 .DS_Store
+src-tauri/gen/
