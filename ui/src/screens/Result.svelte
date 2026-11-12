@@ -238,7 +238,11 @@
   </header>
 
   {#if summary && summary.unreadableDirs > 0 && !summary.readOnly}
-    <UnreadableBanner count={summary.unreadableDirs} />
+    <UnreadableBanner
+      count={summary.unreadableDirs}
+      privacy={summary.unreadablePrivacy}
+      fullAccess={summary.fullDiskAccess}
+    />
   {/if}
 
   <div

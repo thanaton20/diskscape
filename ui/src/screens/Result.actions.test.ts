@@ -13,7 +13,7 @@ const KB = 1024;
 const root = dir(0, '/r', 900 * KB, { items: 3 });
 const files: NodeDto[] = [node(1, 'a.bin', 400 * KB), node(2, 'b.bin', 300 * KB), dir(3, 'sub', 200 * KB)];
 const summary: Summary = {
-  unreadableDirs: 0, totalDsize: 900 * KB, elapsedMs: 5000, readOnly: false, rootPath: '/r', treeId: 7,
+  unreadableDirs: 0, unreadablePrivacy: 0, fullDiskAccess: false, totalDsize: 900 * KB, elapsedMs: 5000, readOnly: false, rootPath: '/r', treeId: 7,
 };
 const okResult = (id: number, freed: number): DeleteResult => ({ id, ok: true, freed, error: null });
 

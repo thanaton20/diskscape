@@ -139,6 +139,12 @@ impl From<&Progress> for ProgressDto {
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
     pub unreadable_dirs: u64,
+    /// How many of them the operating system's privacy protection blocked —
+    /// the only ones "Full Disk Access" on macOS can open.
+    pub unreadable_privacy: u64,
+    /// macOS: this process already has Full Disk Access, so offering it again
+    /// would be pointless. Always false elsewhere.
+    pub full_disk_access: bool,
     pub total_dsize: u64,
     pub elapsed_ms: u64,
     /// True for a tree imported from a file: nothing in it may be deleted or revealed.

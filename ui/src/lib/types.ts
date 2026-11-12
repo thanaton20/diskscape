@@ -52,6 +52,10 @@ export interface ProgressDto {
 
 export interface Summary {
   unreadableDirs: number;
+  /** How many of them macOS privacy protection blocked; only these respond to Full Disk Access. */
+  unreadablePrivacy: number;
+  /** macOS: the app already has Full Disk Access. */
+  fullDiskAccess: boolean;
   totalDsize: number;
   elapsedMs: number;
   /** Opened from a file: nothing may be deleted or revealed. */

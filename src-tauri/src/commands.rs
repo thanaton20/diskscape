@@ -40,11 +40,33 @@ pub fn treemap(tree: &Tree, id: NodeId, width: f32, height: f32) -> Vec<RectDto>
 pub fn summary(tree: &Tree, elapsed_ms: u64) -> Summary {
     Summary {
         unreadable_dirs: tree.unreadable_dirs(),
+        unreadable_privacy: tree.unreadable_privacy_dirs(),
+        full_disk_access: has_full_disk_access(),
         total_dsize: tree.node(tree.root()).map_or(0, |n| n.dsize),
         elapsed_ms,
         read_only: tree.read_only(),
         root_path: display_path(&tree.path(tree.root())),
         tree_id: tree.token(),
+    }
+}
+
+/// True if the file can be opened for reading.
+pub fn can_open(path: &Path) -> bool {
+    std::fs::File::open(path).is_ok()
+}
+
+/// Whether this process has macOS Full Disk Access. There is no API for the
+/// question; the accepted test is whether the system's privacy database,
+/// which only that permission opens, can be read. The answer reflects the
+/// running process, so it turns true only after the app is restarted.
+pub fn has_full_disk_access() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        can_open(Path::new("/Library/Application Support/com.apple.TCC/TCC.db"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
     }
 }
 
@@ -285,6 +307,15 @@ mod tests {
         assert_eq!(s.tree_id, t.token());
         assert_ne!(summary(&tree(), 0).tree_id, s.tree_id);
         assert!(serde_json::to_string(&s).unwrap().contains("\"unreadableDirs\""));
+        assert!(serde_json::to_string(&s).unwrap().contains("\"unreadablePrivacy\":0"));
+        assert!(serde_json::to_string(&s).unwrap().contains("\"fullDiskAccess\":"));
+    }
+
+    #[test]
+    fn full_disk_access_is_judged_by_whether_a_protected_file_opens() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        assert!(can_open(file.path()));
+        assert!(!can_open(std::path::Path::new("/definitely/not/here")));
     }
 
     #[test]

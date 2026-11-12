@@ -49,14 +49,20 @@
 </main>
 
 <style>
+  /* Flex, not a centred grid: an auto-sized grid track grows with the long
+     unwrapped path below, and the card, centred in that track, slid sideways
+     every time the current folder changed. */
   .progress {
     height: 100%;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 28px;
   }
   .card {
+    flex: none;
     width: min(560px, 100%);
+    min-width: 0;
     padding: 26px 28px;
     background: var(--panel);
     border: 1px solid var(--border);

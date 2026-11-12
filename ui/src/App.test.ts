@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.mocked(api.getNodes).mockResolvedValue([root]);
   vi.mocked(api.selectionInfo).mockResolvedValue({ count: 0, dsize: 0, hasSystemPath: false });
   vi.mocked(api.getSummary).mockResolvedValue({
-    unreadableDirs: 0, totalDsize: 4096, elapsedMs: 10, readOnly: false, rootPath: '/sample', treeId: 1,
+    unreadableDirs: 0, unreadablePrivacy: 0, fullDiskAccess: false, totalDsize: 4096, elapsedMs: 10, readOnly: false, rootPath: '/sample', treeId: 1,
   });
 });
 

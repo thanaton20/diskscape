@@ -11,7 +11,7 @@ vi.mock('../lib/api');
 
 const root = dir(0, '/r', 1024 * 1024, { items: 2 });
 const summary: Summary = {
-  unreadableDirs: 0, totalDsize: 1024 * 1024, elapsedMs: 12_300, readOnly: false, rootPath: '/r', treeId: 7,
+  unreadableDirs: 0, unreadablePrivacy: 0, fullDiskAccess: false, totalDsize: 1024 * 1024, elapsedMs: 12_300, readOnly: false, rootPath: '/r', treeId: 7,
 };
 
 function mount(overrides: Partial<Summary> = {}, prepare: () => void = () => {}) {

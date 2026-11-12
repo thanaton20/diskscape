@@ -73,7 +73,8 @@ struct Batch {
     /// Each entry with the key its own batch will arrive under, if it is a
     /// directory that is being descended into.
     entries: Vec<(Entry, Option<u64>)>,
-    read_error: bool,
+    /// Set when the directory itself could not be listed, with the reason.
+    read_error: Option<meta::ReadFailure>,
 }
 
 struct Walker {
@@ -96,15 +97,18 @@ impl Walker {
         }
         let mut entries = Vec::new();
         let mut subdirs = Vec::new();
-        let mut read_error = false;
+        let mut read_error = None;
 
         match std::fs::read_dir(&path) {
-            Err(_) => read_error = true,
+            Err(e) => read_error = Some(meta::failure_kind(&e)),
             Ok(iter) => {
                 for item in iter {
-                    let Ok(item) = item else {
-                        read_error = true;
-                        break;
+                    let item = match item {
+                        Ok(item) => item,
+                        Err(e) => {
+                            read_error = Some(meta::failure_kind(&e));
+                            break;
+                        }
                     };
                     let name = item.file_name();
                     let child = path.join(&name);
@@ -120,9 +124,10 @@ impl Walker {
                         Ok(entry) => entry,
                         // Deleted between listing the directory and reading it.
                         Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-                        Err(_) => {
+                        Err(e) => {
                             let mut unknown = Entry::new(name, NodeKind::Other, 0, 0);
                             unknown.read_error = true;
+                            unknown.privacy_blocked = meta::failure_kind(&e) == meta::ReadFailure::Privacy;
                             entries.push((unknown, None));
                             continue;
                         }
@@ -216,8 +221,8 @@ pub(crate) fn scan_skipping(
                 let Some(parent) = nodes.remove(&batch.dir) else {
                     continue;
                 };
-                if batch.read_error {
-                    tree.set_read_error(parent);
+                if let Some(reason) = batch.read_error {
+                    tree.set_read_failure(parent, reason == meta::ReadFailure::Privacy);
                 }
                 for (entry, key) in batch.entries {
                     items += 1;
@@ -371,6 +376,21 @@ mod tests {
         assert!(t.node(find(&t, "sub").unwrap()).unwrap().flags.child_error);
         assert!(t.node(t.root()).unwrap().flags.child_error);
         assert_eq!(t.unreadable_dirs(), 1);
+        // ordinary file permissions, not the operating system's privacy protection
+        assert!(!hidden.flags.privacy_blocked);
+        assert_eq!(t.unreadable_privacy_dirs(), 0);
+    }
+
+    #[test]
+    fn privacy_blocks_are_told_apart_from_file_permissions() {
+        use meta::{failure_kind, ReadFailure};
+        let os = |code: i32| std::io::Error::from_raw_os_error(code);
+        // EACCES (13): the file's own permissions say no. No privacy setting changes that.
+        assert_eq!(failure_kind(&os(13)), ReadFailure::Permission);
+        assert_eq!(failure_kind(&std::io::Error::other("x")), ReadFailure::Permission);
+        // EPERM (1) on macOS: privacy protection (TCC) or SIP said no.
+        let expected = if cfg!(target_os = "macos") { ReadFailure::Privacy } else { ReadFailure::Permission };
+        assert_eq!(failure_kind(&os(1)), expected);
     }
 
     #[cfg(unix)]

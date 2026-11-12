@@ -80,6 +80,32 @@ fn entry_from(_path: &Path, name: &OsStr, md: &std::fs::Metadata) -> Entry {
     Entry::new(name, kind, md.len(), md.len())
 }
 
+/// Why something could not be read.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum ReadFailure {
+    /// The operating system's privacy protection refused. On macOS this is
+    /// what "Full Disk Access" lifts.
+    Privacy,
+    /// File permissions (or anything else) refused. Only more rights help.
+    Permission,
+}
+
+/// macOS answers "operation not permitted" (EPERM) when its privacy
+/// protection blocks a read, and "permission denied" (EACCES) when the file's
+/// own permissions do. Telling them apart matters: advising a privacy setting
+/// for a folder owned by root would be advice that cannot work.
+pub(crate) fn failure_kind(err: &io::Error) -> ReadFailure {
+    #[cfg(target_os = "macos")]
+    {
+        const EPERM: i32 = 1;
+        if err.raw_os_error() == Some(EPERM) {
+            return ReadFailure::Privacy;
+        }
+    }
+    let _ = err;
+    ReadFailure::Permission
+}
+
 /// Device ids a scan started at `root` may descend into.
 ///
 /// On macOS the startup disk is two volumes glued together with firmlinks —

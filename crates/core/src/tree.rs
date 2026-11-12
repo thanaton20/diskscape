@@ -31,6 +31,10 @@ pub struct Flags {
     pub other_fs: bool,
     /// Another name of an inode that is already counted elsewhere in the tree.
     pub hardlink_dup: bool,
+    /// The read error came from the operating system's privacy protection
+    /// (macOS), which a privacy setting can lift — unlike ordinary file
+    /// permissions, which it cannot.
+    pub privacy_blocked: bool,
 }
 
 /// What a scanner or importer knows about one filesystem object.
@@ -47,6 +51,8 @@ pub struct Entry {
     pub nlink: u64,
     pub read_error: bool,
     pub other_fs: bool,
+    /// With `read_error`: blocked by the operating system's privacy protection.
+    pub privacy_blocked: bool,
 }
 
 impl Entry {
@@ -61,6 +67,7 @@ impl Entry {
             nlink: 1,
             read_error: false,
             other_fs: false,
+            privacy_blocked: false,
         }
     }
 }
@@ -98,6 +105,7 @@ pub struct Tree {
     root_path: PathBuf,
     read_only: bool,
     unreadable: u64,
+    unreadable_privacy: u64,
     token: u64,
 }
 
@@ -110,6 +118,7 @@ impl Tree {
             root_path,
             read_only,
             unreadable: 0,
+            unreadable_privacy: 0,
             token: NEXT_TOKEN.fetch_add(1, Ordering::Relaxed),
         };
         tree.root = tree.push(None, root);
@@ -157,6 +166,7 @@ impl Tree {
                 child_error: false,
                 other_fs: e.other_fs,
                 hardlink_dup: false,
+                privacy_blocked: e.read_error && e.privacy_blocked,
             },
             dev: e.dev,
             ino: e.ino,
@@ -168,8 +178,15 @@ impl Tree {
 
     /// Marks a directory as unreadable. Totals are stale until [`Tree::finalize`] runs.
     pub fn set_read_error(&mut self, id: NodeId) {
+        self.set_read_failure(id, false);
+    }
+
+    /// Marks a directory as unreadable and records whether the operating
+    /// system's privacy protection was the reason.
+    pub fn set_read_failure(&mut self, id: NodeId, privacy_blocked: bool) {
         if let Some(Some(node)) = self.nodes.get_mut(id as usize) {
             node.flags.read_error = true;
+            node.flags.privacy_blocked = privacy_blocked;
         }
     }
 
@@ -188,6 +205,7 @@ impl Tree {
         let mut order: Vec<NodeId> = Vec::with_capacity(self.nodes.len());
         let mut seen: HashSet<(u64, u64)> = HashSet::new();
         let mut unreadable = 0u64;
+        let mut unreadable_privacy = 0u64;
         let mut stack = vec![self.root];
 
         while let Some(id) = stack.pop() {
@@ -216,6 +234,7 @@ impl Tree {
             }
             if node.flags.read_error {
                 unreadable += 1;
+                unreadable_privacy += u64::from(node.flags.privacy_blocked);
             }
             order.push(id);
         }
@@ -234,6 +253,7 @@ impl Tree {
             }
         }
         self.unreadable = unreadable;
+        self.unreadable_privacy = unreadable_privacy;
     }
 
     fn name_of(&self, id: NodeId) -> &std::ffi::OsStr {
@@ -329,6 +349,12 @@ impl Tree {
     pub fn unreadable_dirs(&self) -> u64 {
         self.unreadable
     }
+
+    /// How many of those were blocked by the operating system's privacy
+    /// protection rather than by file permissions.
+    pub fn unreadable_privacy_dirs(&self) -> u64 {
+        self.unreadable_privacy
+    }
 }
 
 #[cfg(test)]
@@ -418,6 +444,30 @@ mod tests {
         assert!(t.node(sub).unwrap().flags.child_error);
         assert!(t.node(t.root()).unwrap().flags.child_error);
         assert_eq!(t.unreadable_dirs(), 1);
+    }
+
+    #[test]
+    fn folders_blocked_by_privacy_protection_are_counted_separately() {
+        let mut t = Tree::new(PathBuf::from("/r"), dir("/r"), false);
+        let mut system_only = dir("root-only");
+        system_only.read_error = true;
+        t.add_child(t.root(), system_only);
+        let mut protected = dir("Mail");
+        protected.read_error = true;
+        protected.privacy_blocked = true;
+        let protected = t.add_child(t.root(), protected);
+        let later = t.add_child(t.root(), dir("Photos"));
+        t.set_read_failure(later, true);
+        t.finalize();
+        assert_eq!(t.unreadable_dirs(), 3);
+        assert_eq!(t.unreadable_privacy_dirs(), 2);
+        assert!(t.node(protected).unwrap().flags.privacy_blocked);
+        // a plain read error is not a privacy block
+        let plain = t.add_child(t.root(), dir("x"));
+        t.set_read_error(plain);
+        t.finalize();
+        assert!(!t.node(plain).unwrap().flags.privacy_blocked);
+        assert_eq!((t.unreadable_dirs(), t.unreadable_privacy_dirs()), (4, 2));
     }
 
     #[test]
