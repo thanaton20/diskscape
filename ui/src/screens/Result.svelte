@@ -2,13 +2,19 @@
   import { onMount } from 'svelte';
   import * as api from '../lib/api';
   import Breadcrumbs from '../components/Breadcrumbs.svelte';
+  import ContextMenu, { type MenuAction } from '../components/ContextMenu.svelte';
+  import DeleteDialog from '../components/DeleteDialog.svelte';
+  import Toasts, { type Toast } from '../components/Toasts.svelte';
   import StatusBar from '../components/StatusBar.svelte';
   import Treemap from '../components/Treemap.svelte';
   import TreeList from '../components/TreeList.svelte';
   import UnreadableBanner from '../components/UnreadableBanner.svelte';
-  import { t } from '../lib/i18n';
+  import { formatSize } from '../lib/format';
+  import { getLocale, t } from '../lib/i18n';
+  import { platform } from '../lib/platform';
+  import { matchShortcut } from '../lib/shortcuts';
   import { TreeModel } from '../lib/treeModel.svelte';
-  import type { NodeDto, SelectionInfo, Summary } from '../lib/types';
+  import type { DeleteMode, DeleteResult, NodeDto, SelectionInfo, Summary } from '../lib/types';
 
   interface Props {
     root: NodeDto;
@@ -36,6 +42,16 @@
   /** Bumped whenever the tree changes, to make the map reload. */
   let mapVersion = $state(0);
 
+  const INFO_TOAST_MS = 5000;
+  const locale = getLocale();
+  let menu = $state<{ x: number; y: number } | null>(null);
+  /** Set while the "delete permanently?" dialog is open. */
+  let confirming = $state<SelectionInfo | null>(null);
+  let toasts = $state<Toast[]>([]);
+  let nextToast = 0;
+  /** Deleting and revealing need a tree scanned on this machine, and its id. */
+  const canModify = $derived(summary !== null && !summary.readOnly);
+
   onMount(async () => {
     await model.expand(model.rows[0].node.id);
     summary = await api.getSummary();
@@ -57,6 +73,120 @@
     list?.scrollToIndex(index);
   }
 
+  function toast(error: boolean, title: string, lines: string[] = []) {
+    const id = ++nextToast;
+    toasts = [...toasts, { id, error, title, lines }];
+    if (!error) setTimeout(() => dismiss(id), INFO_TOAST_MS);
+  }
+
+  function dismiss(id: number) {
+    toasts = toasts.filter((item) => item.id !== id);
+  }
+
+  const failure = (e: unknown) => toast(true, t('error.generic', { message: String(e) }));
+
+  /** Every action on the selection starts here, and only from something the user did. */
+  async function act(action: MenuAction) {
+    menu = null;
+    if (selected.length === 0) return;
+    try {
+      if (action === 'copyPath') {
+        const paths = await Promise.all(selected.map((id) => api.getPath(id)));
+        await navigator.clipboard.writeText(paths.join('\n'));
+        toast(false, t('toast.copied'));
+      } else if (!canModify) {
+        return;
+      } else if (action === 'reveal') {
+        if (selected.length === 1) await api.reveal(selected[0]);
+      } else if (action === 'trash') {
+        await remove('trash');
+      } else {
+        // Permanent deletion always goes through the confirmation dialog.
+        confirming = await api.selectionInfo(selected);
+      }
+    } catch (e) {
+      failure(e);
+    }
+  }
+
+  async function remove(mode: DeleteMode) {
+    if (!summary || selected.length === 0) return;
+    const ids = [...selected];
+    // Paths are looked up first: a deleted node can no longer be asked for its path.
+    const paths = new Map<number, string>();
+    try {
+      const found = await Promise.all(ids.map((id) => api.getPath(id)));
+      found.forEach((path, i) => paths.set(ids[i], path));
+    } catch {
+      /* fall back to ids in messages */
+    }
+
+    let results: DeleteResult[];
+    try {
+      results = await api.deleteNodes(ids, mode, summary.treeId);
+    } catch (e) {
+      failure(e);
+      return;
+    }
+
+    const done = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+    if (done.length > 0) {
+      const freed = done.reduce((sum, r) => sum + r.freed, 0);
+      toast(false, t(mode === 'trash' ? 'toast.trashed' : 'toast.deleted', {
+        count: done.length,
+        size: formatSize(freed, locale),
+      }));
+    }
+    if (failed.length > 0) {
+      toast(
+        true,
+        t('toast.failed', { n: failed.length }),
+        failed.map((r) => {
+          const why = r.error ? t(`error.${r.error.kind}`, { message: r.error.message }) : '';
+          return `${paths.get(r.id) ?? r.id} — ${why}`;
+        }),
+      );
+    }
+    await reload();
+  }
+
+  /** Brings the list, the map and the totals back in line with the tree. */
+  async function reload() {
+    try {
+      await model.refresh();
+      mapVersion += 1;
+      summary = await api.getSummary();
+      const [shown] = await api.getNodes([mapDir]);
+      if (!shown) mapDir = model.rows[0].node.id;
+      await select([]);
+    } catch (e) {
+      failure(e);
+    }
+  }
+
+  async function exportTree() {
+    const path = await api.pickSavePath();
+    if (!path) return;
+    try {
+      await api.exportNcdu(path);
+      toast(false, t('toast.exported', { path }));
+    } catch (e) {
+      failure(e);
+    }
+  }
+
+  function windowKey(event: KeyboardEvent) {
+    // The menu and the dialog handle their own keys; shortcuts must not reach past them.
+    if (menu || confirming) return;
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    const action = matchShortcut(event, platform === 'macos');
+    if (!action || selected.length === 0) return;
+    event.preventDefault();
+    void act(action);
+  }
+
   const clamp = (value: number) => Math.round(Math.max(SPLIT_MIN, Math.min(SPLIT_MAX, value)));
 
   function dividerKey(event: KeyboardEvent) {
@@ -73,9 +203,12 @@
   }
 </script>
 
+<svelte:window onkeydown={windowKey} />
+
 <div class="result" data-testid="result-screen">
   <header class="toolbar">
     <button class="btn" onclick={onNewScan}>{t('result.newScan')}</button>
+    <button class="btn" onclick={exportTree}>{t('result.export')}</button>
     <span class="path mono" title={summary?.rootPath ?? root.name}>{summary?.rootPath ?? root.name}</span>
     {#if summary?.readOnly}
       <span class="badge">{t('result.readOnly')}</span>
@@ -101,8 +234,8 @@
       {model}
       {selected}
       onSelect={select}
-      onOpen={() => {}}
-      onContextMenu={() => {}}
+      onOpen={(id) => { if (canModify) api.reveal(id).catch(failure); }}
+      onContextMenu={(_ids, x, y) => (menu = { x, y })}
     />
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
@@ -130,6 +263,27 @@
       </div>
     </div>
   </div>
+
+  {#if menu}
+    <ContextMenu
+      x={menu.x}
+      y={menu.y}
+      {canModify}
+      single={selected.length === 1}
+      onAction={act}
+      onClose={() => (menu = null)}
+    />
+  {/if}
+
+  {#if confirming}
+    <DeleteDialog
+      info={confirming}
+      onCancel={() => (confirming = null)}
+      onConfirm={() => { confirming = null; void remove('permanent'); }}
+    />
+  {/if}
+
+  <Toasts {toasts} onDismiss={dismiss} />
 
   <StatusBar
     selectedCount={selection.count}

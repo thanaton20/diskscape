@@ -1,0 +1,43 @@
+import { describe, expect, test } from 'vitest';
+import { matchShortcut } from './shortcuts';
+
+const key = (k: string, mods: Partial<Record<'shiftKey' | 'altKey' | 'metaKey' | 'ctrlKey', boolean>> = {}) =>
+  ({ key: k, shiftKey: false, altKey: false, metaKey: false, ctrlKey: false, ...mods });
+
+describe('matchShortcut', () => {
+  test('Delete moves to the Trash on every platform', () => {
+    expect(matchShortcut(key('Delete'), false)).toBe('trash');
+    expect(matchShortcut(key('Delete'), true)).toBe('trash');
+  });
+
+  test('Shift+Delete deletes permanently', () => {
+    expect(matchShortcut(key('Delete', { shiftKey: true }), false)).toBe('permanent');
+    expect(matchShortcut(key('Delete', { shiftKey: true }), true)).toBe('permanent');
+  });
+
+  test('macOS Finder shortcuts', () => {
+    expect(matchShortcut(key('Backspace', { metaKey: true }), true)).toBe('trash');
+    expect(matchShortcut(key('Backspace', { metaKey: true, altKey: true }), true)).toBe('permanent');
+    // not on other platforms, where Backspace is "go back"
+    expect(matchShortcut(key('Backspace', { metaKey: true }), false)).toBeNull();
+    expect(matchShortcut(key('Backspace', { ctrlKey: true }), false)).toBeNull();
+  });
+
+  test('copy path', () => {
+    expect(matchShortcut(key('c', { ctrlKey: true }), false)).toBe('copyPath');
+    expect(matchShortcut(key('C', { ctrlKey: true }), false)).toBe('copyPath');
+    expect(matchShortcut(key('c', { metaKey: true }), true)).toBe('copyPath');
+    expect(matchShortcut(key('c', { ctrlKey: true }), true)).toBeNull();
+    expect(matchShortcut(key('c'), false)).toBeNull();
+  });
+
+  test('anything else, and near misses, do nothing', () => {
+    expect(matchShortcut(key('Backspace'), true)).toBeNull();
+    expect(matchShortcut(key('Backspace'), false)).toBeNull();
+    expect(matchShortcut(key('Delete', { ctrlKey: true }), false)).toBeNull();
+    expect(matchShortcut(key('Delete', { altKey: true }), false)).toBeNull();
+    expect(matchShortcut(key('Delete', { shiftKey: true, ctrlKey: true }), false)).toBeNull();
+    expect(matchShortcut(key('Enter'), false)).toBeNull();
+    expect(matchShortcut(key('d'), true)).toBeNull();
+  });
+});
