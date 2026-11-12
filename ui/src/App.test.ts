@@ -39,8 +39,9 @@ beforeEach(() => {
   vi.mocked(api.getTreemap).mockResolvedValue([]);
   vi.mocked(api.getAncestors).mockResolvedValue([]);
   vi.mocked(api.getNodes).mockResolvedValue([root]);
+  vi.mocked(api.selectionInfo).mockResolvedValue({ count: 0, dsize: 0, hasSystemPath: false });
   vi.mocked(api.getSummary).mockResolvedValue({
-    unreadableDirs: 0, totalDsize: 4096, elapsedMs: 10, readOnly: false, rootPath: '/sample',
+    unreadableDirs: 0, totalDsize: 4096, elapsedMs: 10, readOnly: false, rootPath: '/sample', treeId: 1,
   });
 });
 
