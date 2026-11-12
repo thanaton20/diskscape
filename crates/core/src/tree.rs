@@ -154,6 +154,13 @@ impl Tree {
         id
     }
 
+    /// Marks a directory as unreadable. Totals are stale until [`Tree::finalize`] runs.
+    pub fn set_read_error(&mut self, id: NodeId) {
+        if let Some(Some(node)) = self.nodes.get_mut(id as usize) {
+            node.flags.read_error = true;
+        }
+    }
+
     /// `None` once the node has been removed.
     pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(id as usize).and_then(Option::as_ref)
