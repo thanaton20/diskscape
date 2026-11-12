@@ -1,0 +1,17 @@
+{
+  "name": "diskscape",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Disk usage analyzer with a tree list and a treemap",
+  "license": "MIT",
+  "scripts": {
+    "setup": "npm install && npm --prefix ui install",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "test": "cargo test --workspace && npm --prefix ui test",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}

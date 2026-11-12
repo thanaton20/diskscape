@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install system packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev build-essential ncdu
+
+      # ncdu is only there so the tests can cross-check totals and the export format against it.
+      - name: Install ncdu (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ncdu
+
+      - name: Interface — install, type-check, test, build
+        working-directory: ui
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
+
+      # The interface must be built first: the app embeds ui/dist at compile time.
+      - name: Rust tests
+        run: cargo test --workspace
+
+      # These use the real system Trash, so they are not part of the default run.
+      - name: Trash tests
+        run: cargo test -p diskscape-core --lib -- --ignored
