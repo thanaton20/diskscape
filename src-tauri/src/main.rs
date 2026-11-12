@@ -12,6 +12,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
+            commands::initial_path,
             commands::list_volumes,
             commands::start_scan,
             commands::cancel_scan,

@@ -7,6 +7,8 @@ import type {
   VolumeDto,
 } from './types';
 
+/** Path given on the command line (`diskscape <path>`), if any. */
+export const initialPath = () => invoke<string | null>('initial_path');
 export const listVolumes = () => invoke<VolumeDto[]>('list_volumes');
 export const startScan = (path: string) => invoke<void>('start_scan', { path });
 export const cancelScan = () => invoke<void>('cancel_scan');

@@ -77,7 +77,7 @@ describe('Result actions', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     await waitFor(() => expect(api.getTreemap).toHaveBeenCalledTimes(2));
     expect(api.getSummary).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText('Moved to Trash: 1 items, 100.0 KB freed')).toBeInTheDocument();
+    expect(await screen.findByText('Moved to Trash — items: 1, freed: 100.0 KB')).toBeInTheDocument();
     // the selection is cleared afterwards
     await waitFor(() => expect(screen.queryByText(/^Selected:/)).not.toBeInTheDocument());
   });
@@ -103,13 +103,13 @@ describe('Result actions', () => {
     await user.pointer({ keys: '[MouseRight]', target: await row('b\\.bin') });
     await user.click(await screen.findByRole('menuitem', { name: 'Delete permanently…' }));
     const dialog = await screen.findByRole('alertdialog');
-    expect(dialog).toHaveTextContent('2 items, 700.0 KB');
+    expect(dialog).toHaveTextContent('Items: 2, 700.0 KB');
     expect(dialog).toHaveTextContent('cannot be undone');
     expect(api.deleteNodes).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Delete permanently' }));
     await waitFor(() => expect(api.deleteNodes).toHaveBeenCalledWith([1, 2], 'permanent', 7));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(await screen.findByText(/^Deleted permanently: 2 items/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Deleted permanently — items: 2/)).toBeInTheDocument();
   });
 
   test('dialog focuses Cancel by default; Enter does not confirm; Escape cancels', async () => {
@@ -155,12 +155,12 @@ describe('Result actions', () => {
     await user.keyboard('{/Shift}');
     await user.keyboard('{Delete}');
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Not deleted: 2 items');
+    expect(alert).toHaveTextContent('Items not deleted: 2');
     expect(alert).toHaveTextContent('/r/b.bin');
     expect(alert).toHaveTextContent('Permission denied');
     expect(alert).toHaveTextContent('/r/sub');
     expect(alert).toHaveTextContent('changed on disk since the scan');
-    expect(await screen.findByText('Moved to Trash: 1 items, 400.0 KB freed')).toBeInTheDocument();
+    expect(await screen.findByText('Moved to Trash — items: 1, freed: 400.0 KB')).toBeInTheDocument();
   });
 
   test('a trashUnavailable error never triggers a permanent delete', async () => {

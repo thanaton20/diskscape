@@ -33,6 +33,8 @@ export interface RectDto {
   depth: number;
   isDir: boolean;
   category: Category;
+  /** Label to print on the block; empty when there is no room for one. */
+  name: string;
 }
 
 export interface VolumeDto {

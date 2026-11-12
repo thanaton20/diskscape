@@ -103,6 +103,22 @@
       ctx.fillRect(x, y, bw, bh);
       if (r.id === null) hatch(ctx, x, y, bw, bh, mode);
     }
+    // Labels go on last so no later block paints over them.
+    ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = mode === 'light' ? 'rgb(18 22 38 / 88%)' : 'rgb(255 255 255 / 92%)';
+    for (const r of list) {
+      if (r.name) label(ctx, r.name, r.x + 5, r.y + 4, r.w - 10);
+    }
+  }
+
+  /** Prints `text` in at most `width` pixels, cut with an ellipsis if it is longer. */
+  function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, width: number) {
+    let shown = text;
+    while (shown.length > 1 && ctx.measureText(shown).width > width) {
+      shown = `${shown.slice(0, shown.endsWith('…') ? -2 : -1)}…`;
+    }
+    if (ctx.measureText(shown).width <= width) ctx.fillText(shown, x, y);
   }
 
   /** Diagonal stripes mark the block that stands for many small items. */

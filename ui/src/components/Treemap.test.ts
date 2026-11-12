@@ -9,7 +9,7 @@ import type { RectDto } from '../lib/types';
 vi.mock('../lib/api');
 
 const rect = (id: number | null, x: number, y: number, w: number, h: number, isDir = false, depth = 0): RectDto =>
-  ({ id, x, y, w, h, depth, isDir, category: 'video' });
+  ({ id, x, y, w, h, depth, isDir, category: 'video', name: '' });
 // dir 2 on the left with file 5 inside; file 3 top right; "small items" bottom right
 const rects = [
   rect(2, 0, 0, 400, 600, true),

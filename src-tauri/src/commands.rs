@@ -1,7 +1,7 @@
 //! Commands for scanning and browsing. The logic lives in plain functions
 //! over a `Tree` so it can be tested without a window.
 
-use crate::dto::{display_path, node_dto, NodeDto, ProgressDto, RectDto, ScanFailed, ScanFinished, Summary, VolumeDto};
+use crate::dto::{display_path, node_dto, rect_dto, NodeDto, ProgressDto, RectDto, ScanFailed, ScanFinished, Summary, VolumeDto};
 use crate::state::{AppState, NO_TREE};
 use diskscape_core::scan::{scan, CancelToken, ScanError, ScanOptions};
 use diskscape_core::tree::{NodeId, SortKey, Tree};
@@ -34,7 +34,7 @@ pub fn ancestors(tree: &Tree, id: NodeId) -> Vec<NodeDto> {
 }
 
 pub fn treemap(tree: &Tree, id: NodeId, width: f32, height: f32) -> Vec<RectDto> {
-    core_treemap::layout(tree, id, width, height).iter().map(RectDto::from).collect()
+    core_treemap::layout(tree, id, width, height).iter().map(|r| rect_dto(tree, r)).collect()
 }
 
 pub fn summary(tree: &Tree, elapsed_ms: u64) -> Summary {
@@ -80,12 +80,25 @@ pub fn volumes() -> Vec<VolumeDto> {
     out
 }
 
+/// The folder to scan at launch, from `diskscape <path>`: the first argument
+/// after the program name that is an existing path. Options are passed over.
+pub fn pick_initial_path(args: impl IntoIterator<Item = String>) -> Option<String> {
+    args.into_iter()
+        .skip(1)
+        .find(|arg| !arg.starts_with('-') && Path::new(arg).exists())
+}
+
 fn with_tree<T>(state: &AppState, f: impl FnOnce(&Tree) -> T) -> Result<T, String> {
     let guard = state.tree.read().map_err(|_| "internal state is poisoned".to_string())?;
     guard.as_ref().map(f).ok_or_else(|| NO_TREE.to_string())
 }
 
 // ------------------------------------------------------------ commands
+
+#[tauri::command]
+pub fn initial_path() -> Option<String> {
+    pick_initial_path(std::env::args())
+}
 
 #[tauri::command(async)]
 pub fn list_volumes() -> Vec<VolumeDto> {
@@ -291,6 +304,19 @@ mod tests {
         std::fs::write(file.path(), b"not an export").unwrap();
         assert!(import_file(file.path()).is_err());
         assert!(import_file(std::path::Path::new("/definitely/not/here.json")).is_err());
+    }
+
+    #[test]
+    fn initial_path_is_the_first_existing_argument() {
+        let dir = tempfile::tempdir().unwrap();
+        let existing = dir.path().to_string_lossy().into_owned();
+        let args = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(pick_initial_path(args(&["diskscape", &existing])), Some(existing.clone()));
+        // options and things that are not there are passed over
+        assert_eq!(pick_initial_path(args(&["diskscape", "--flag", "/no/such/dir", &existing])), Some(existing));
+        assert_eq!(pick_initial_path(args(&["diskscape"])), None);
+        assert_eq!(pick_initial_path(args(&["diskscape", "/no/such/dir"])), None);
+        assert_eq!(pick_initial_path(args(&[])), None);
     }
 
     #[test]

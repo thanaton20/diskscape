@@ -33,6 +33,7 @@ beforeEach(() => {
   vi.mocked(api.listVolumes).mockResolvedValue([
     { name: 'Macintosh HD', mountPoint: '/', total: 1000, free: 250 },
   ]);
+  vi.mocked(api.initialPath).mockResolvedValue(null);
   vi.mocked(api.startScan).mockResolvedValue(undefined);
   vi.mocked(api.cancelScan).mockResolvedValue(undefined);
   vi.mocked(api.getChildren).mockResolvedValue([]);
@@ -81,6 +82,19 @@ describe('App', () => {
     await startScan();
     handlers.finished!({ root });
     expect(await screen.findByTestId('result-screen')).toBeInTheDocument();
+  });
+
+  test('a path given on the command line is scanned straight away', async () => {
+    vi.mocked(api.initialPath).mockResolvedValue('/Users/me/Downloads');
+    render(App);
+    await waitFor(() => expect(api.startScan).toHaveBeenCalledWith('/Users/me/Downloads'));
+    expect(await screen.findByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  test('without one the start screen is shown and nothing is scanned', async () => {
+    render(App);
+    expect(await screen.findByRole('button', { name: /choose folder/i })).toBeInTheDocument();
+    expect(api.startScan).not.toHaveBeenCalled();
   });
 
   test('a rejected start_scan returns to the start screen with the error', async () => {

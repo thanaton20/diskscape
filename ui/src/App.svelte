@@ -26,6 +26,13 @@
       // Cancelling discards the partial result and returns to the start screen.
       api.onScanCancelled(() => (screen = 'start')),
     ];
+    // `diskscape <path>` goes straight to scanning that path.
+    api
+      .initialPath()
+      .then((path) => {
+        if (path && screen === 'start') void scan(path);
+      })
+      .catch(() => {});
     return () => subscriptions.forEach((s) => s.then((off) => off?.()).catch(() => {}));
   });
 

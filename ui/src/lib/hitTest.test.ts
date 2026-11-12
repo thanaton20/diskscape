@@ -3,7 +3,7 @@ import { hitTest } from './hitTest';
 import type { RectDto } from './types';
 
 const rect = (id: number | null, x: number, y: number, w: number, h: number, depth = 0, isDir = false): RectDto =>
-  ({ id, x, y, w, h, depth, isDir, category: 'other' });
+  ({ id, x, y, w, h, depth, isDir, category: 'other', name: '' });
 
 // A directory (1) covering the left half with a file (2) inside it, and a file (3) on the right.
 const rects = [rect(1, 0, 0, 100, 100, 0, true), rect(3, 100, 0, 100, 100), rect(2, 10, 10, 50, 50, 1)];

@@ -109,9 +109,9 @@ describe('Result', () => {
       );
       vi.mocked(api.getPath).mockResolvedValue('/r/x');
       vi.mocked(api.getTreemap).mockResolvedValue([
-        { id: 3, x: 0, y: 0, w: 400, h: 600, depth: 0, isDir: true, category: 'other' },
-        { id: 1, x: 400, y: 0, w: 400, h: 600, depth: 0, isDir: false, category: 'other' },
-        { id: 9, x: 10, y: 10, w: 100, h: 100, depth: 1, isDir: false, category: 'other' },
+        { id: 3, x: 0, y: 0, w: 400, h: 600, depth: 0, isDir: true, category: 'other', name: '' },
+        { id: 1, x: 400, y: 0, w: 400, h: 600, depth: 0, isDir: false, category: 'other', name: '' },
+        { id: 9, x: 10, y: 10, w: 100, h: 100, depth: 1, isDir: false, category: 'other', name: '' },
       ]);
     });
 

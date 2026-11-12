@@ -80,20 +80,31 @@ pub struct RectDto {
     pub depth: u8,
     pub is_dir: bool,
     pub category: &'static str,
+    /// File name to print on the block; empty when the block is too small to
+    /// hold a label, is a folder frame, or is the aggregate.
+    pub name: String,
 }
 
-impl From<&Rect> for RectDto {
-    fn from(r: &Rect) -> Self {
-        RectDto {
-            id: r.id,
-            x: r.x,
-            y: r.y,
-            w: r.w,
-            h: r.h,
-            depth: r.depth,
-            is_dir: r.is_dir,
-            category: r.category.as_str(),
-        }
+/// Smallest block that gets a label.
+const LABEL_MIN_W: f32 = 64.0;
+const LABEL_MIN_H: f32 = 18.0;
+
+pub fn rect_dto(tree: &Tree, r: &Rect) -> RectDto {
+    let labelled = !r.is_dir && r.w >= LABEL_MIN_W && r.h >= LABEL_MIN_H;
+    let name = match (labelled, r.id.and_then(|id| tree.node(id))) {
+        (true, Some(node)) => node.name.to_string_lossy().into_owned(),
+        _ => String::new(),
+    };
+    RectDto {
+        id: r.id,
+        x: r.x,
+        y: r.y,
+        w: r.w,
+        h: r.h,
+        depth: r.depth,
+        is_dir: r.is_dir,
+        category: r.category.as_str(),
+        name,
     }
 }
 
@@ -216,10 +227,25 @@ mod tests {
     fn rect_dto_maps_aggregate_to_null_id() {
         use diskscape_core::category::Category;
         use diskscape_core::treemap::Rect;
-        let rect = Rect { id: None, x: 1.0, y: 2.0, w: 3.0, h: 4.0, depth: 2, is_dir: false, category: Category::Archive };
-        let json = serde_json::to_string(&RectDto::from(&rect)).unwrap();
+        let t = tree();
+        let rect = Rect { id: None, x: 1.0, y: 2.0, w: 300.0, h: 40.0, depth: 2, is_dir: false, category: Category::Archive };
+        let json = serde_json::to_string(&rect_dto(&t, &rect)).unwrap();
         assert!(json.contains("\"id\":null"));
         assert!(json.contains("\"isDir\":false"));
         assert!(json.contains("\"category\":\"archive\""));
+        assert!(json.contains("\"name\":\"\""));
+    }
+
+    #[test]
+    fn rect_dto_labels_only_file_blocks_that_have_room() {
+        use diskscape_core::category::Category;
+        use diskscape_core::treemap::Rect;
+        let t = tree();
+        let block = |id, w, h, is_dir| Rect { id: Some(id), x: 0.0, y: 0.0, w, h, depth: 0, is_dir, category: Category::Video };
+        assert_eq!(rect_dto(&t, &block(1, 200.0, 40.0, false)).name, "movie.mkv");
+        assert_eq!(rect_dto(&t, &block(1, 40.0, 40.0, false)).name, "");
+        assert_eq!(rect_dto(&t, &block(1, 200.0, 10.0, false)).name, "");
+        assert_eq!(rect_dto(&t, &block(2, 200.0, 40.0, true)).name, "");
+        assert_eq!(rect_dto(&t, &block(999, 200.0, 40.0, false)).name, "");
     }
 }
