@@ -1,0 +1,9 @@
+[1,2,{"progname":"ncdu","progver":"2.9.2","timestamp":1794303876},
+[{"name":"/sample","asize":128,"dev":16777233},
+[{"name":"sub","asize":192},
+[{"name":".hidden","asize":96},
+{"name":"b.bin","asize":2,"dsize":4096}],
+{"name":".dotfile","asize":1,"dsize":4096},
+{"name":"hard.txt","asize":5,"dsize":4096,"ino":54282280,"hlnkc":true,"nlink":2},
+{"name":"link","asize":5,"notreg":true}],
+{"name":"a.txt","asize":5,"dsize":4096,"ino":54282280,"hlnkc":true,"nlink":2}]]
