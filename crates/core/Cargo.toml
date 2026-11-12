@@ -1,0 +1,8 @@
+[package]
+name = "diskscape-core"
+description = "Disk scanner, tree model and ncdu-compatible import/export for Diskscape"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
