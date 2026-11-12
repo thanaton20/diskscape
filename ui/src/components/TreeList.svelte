@@ -145,6 +145,7 @@
           class:selected={selectedSet.has(node.id)}
           class:dim={node.hardlinkDup || node.otherFs}
           role="row"
+          tabindex="-1"
           aria-level={row.depth + 1}
           aria-rowindex={first + i + 1}
           aria-selected={selectedSet.has(node.id)}

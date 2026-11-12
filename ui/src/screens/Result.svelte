@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as api from '../lib/api';
+  import Breadcrumbs from '../components/Breadcrumbs.svelte';
   import StatusBar from '../components/StatusBar.svelte';
+  import Treemap from '../components/Treemap.svelte';
   import TreeList from '../components/TreeList.svelte';
   import UnreadableBanner from '../components/UnreadableBanner.svelte';
   import { t } from '../lib/i18n';
@@ -27,6 +29,12 @@
   let split = $state(45);
   let panes = $state<HTMLDivElement>();
   let dragging = $state(false);
+  let list = $state<TreeList>();
+  /** Folder shown on the map. */
+  // svelte-ignore state_referenced_locally
+  let mapDir = $state(root.id);
+  /** Bumped whenever the tree changes, to make the map reload. */
+  let mapVersion = $state(0);
 
   onMount(async () => {
     await model.expand(model.rows[0].node.id);
@@ -40,6 +48,13 @@
     const info = ids.length ? await api.selectionInfo(ids) : NOTHING;
     // Ignore an answer that a newer selection has overtaken.
     if (request === selectionRequest) selection = info;
+  }
+
+  /** A block was clicked on the map: open the list down to it and select it there. */
+  async function selectFromMap(id: number) {
+    const index = await model.revealNode(id);
+    await select([id]);
+    list?.scrollToIndex(index);
   }
 
   const clamp = (value: number) => Math.round(Math.max(SPLIT_MIN, Math.min(SPLIT_MAX, value)));
@@ -82,6 +97,7 @@
     role="presentation"
   >
     <TreeList
+      bind:this={list}
       {model}
       {selected}
       onSelect={select}
@@ -101,7 +117,18 @@
       onkeydown={dividerKey}
       onpointerdown={(e) => { dragging = true; e.preventDefault(); }}
     ></div>
-    <div class="map-pane" data-testid="map-pane"></div>
+    <div class="map-pane">
+      <Breadcrumbs dirId={mapDir} onNavigate={(id) => (mapDir = id)} />
+      <div class="map-area">
+        <Treemap
+          dirId={mapDir}
+          {selected}
+          version={mapVersion}
+          onSelect={selectFromMap}
+          onEnter={(id) => (mapDir = id)}
+        />
+      </div>
+    </div>
   </div>
 
   <StatusBar
@@ -165,6 +192,12 @@
   .map-pane {
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     background: var(--panel-2);
+  }
+  .map-area {
+    flex: 1;
+    min-height: 0;
   }
 </style>
