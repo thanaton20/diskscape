@@ -17,7 +17,7 @@ beforeEach(() => {
 
 describe('Breadcrumbs', () => {
   test('lists ancestors as buttons and the current folder as text', async () => {
-    render(Breadcrumbs, { props: { dirId: 4, onNavigate: vi.fn() } });
+    render(Breadcrumbs, { props: { dirId: 4, rootId: 0, onNavigate: vi.fn() } });
     expect(await screen.findByRole('button', { name: '/r' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'sub' })).toBeInTheDocument();
     expect(screen.getByText('deep')).toBeInTheDocument();
@@ -28,8 +28,23 @@ describe('Breadcrumbs', () => {
 
   test('clicking an ancestor navigates to it', async () => {
     const onNavigate = vi.fn();
-    render(Breadcrumbs, { props: { dirId: 4, onNavigate } });
+    render(Breadcrumbs, { props: { dirId: 4, rootId: 0, onNavigate } });
     await userEvent.click(await screen.findByRole('button', { name: 'sub' }));
     expect(onNavigate).toHaveBeenCalledWith(2);
+  });
+
+  test('a back button returns to the scanned folder from anywhere below it', async () => {
+    const onNavigate = vi.fn();
+    render(Breadcrumbs, { props: { dirId: 4, rootId: 0, onNavigate } });
+    await userEvent.click(screen.getByRole('button', { name: 'Back to the scanned folder' }));
+    expect(onNavigate).toHaveBeenCalledWith(0);
+  });
+
+  test('there is no back button while the scanned folder itself is shown', async () => {
+    vi.mocked(api.getAncestors).mockResolvedValue([]);
+    vi.mocked(api.getNodes).mockResolvedValue([dir(0, '/r', 10)]);
+    render(Breadcrumbs, { props: { dirId: 0, rootId: 0, onNavigate: vi.fn() } });
+    expect(await screen.findByText('/r')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to the scanned folder' })).not.toBeInTheDocument();
   });
 });

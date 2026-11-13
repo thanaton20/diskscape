@@ -57,9 +57,10 @@ diskscape ~/Downloads
 
 | Action | How |
 |---|---|
-| Expand / collapse a folder | click the triangle, double-click, or → / ← |
+| Expand / collapse a folder | click the triangle, or → / ← |
+| Show a folder on the map | double-click it in the list or on the map, or Enter |
+| Back to the whole scan on the map | Esc, or the ← button above the map |
 | Select several items | Ctrl/⌘-click, Shift-click |
-| Enter a folder on the map | double-click its block; the path above the map leads back |
 | Show in the file manager | context menu, or double-click a file |
 | Copy path | context menu, or Ctrl+C (⌘C on macOS) |
 | Move to Trash | context menu, or Delete (also ⌘⌫ on macOS) |

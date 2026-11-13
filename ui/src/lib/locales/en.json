@@ -42,6 +42,7 @@
   "row.hardlink": "Hard link — its size is counted at its other name",
   "row.expand": "Expand",
   "row.collapse": "Collapse",
+  "map.back": "Back to the scanned folder",
   "map.label": "Map of disk usage",
   "map.small": "Small items",
   "map.empty": "Nothing to show here",

@@ -36,9 +36,10 @@
   let panes = $state<HTMLDivElement>();
   let dragging = $state(false);
   let list = $state<TreeList>();
-  /** Folder shown on the map. */
   // svelte-ignore state_referenced_locally
-  let mapDir = $state(root.id);
+  const rootId = root.id;
+  /** Folder shown on the map. */
+  let mapDir = $state(rootId);
   /** Bumped whenever the tree changes, to make the map reload. */
   let mapVersion = $state(0);
 
@@ -180,7 +181,7 @@
       mapVersion += 1;
       summary = await api.getSummary();
       const [shown] = await api.getNodes([mapDir]);
-      if (!shown) mapDir = model.rows[0].node.id;
+      if (!shown) mapDir = rootId;
       await select([]);
     } catch (e) {
       failure(e);
@@ -203,10 +204,22 @@
     if (menu || confirming) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    // Escape steps the map back out to the scanned folder.
+    if (event.key === 'Escape' && mapDir !== rootId) {
+      event.preventDefault();
+      mapDir = rootId;
+      return;
+    }
     const action = matchShortcut(event, platform === 'macos');
     if (!action || selected.length === 0) return;
     event.preventDefault();
     void act(action);
+  }
+
+  /** A folder was double-clicked on the map: open it there and point at it in the list. */
+  async function enterFromMap(id: number) {
+    mapDir = id;
+    await selectFromMap(id);
   }
 
   const clamp = (value: number) => Math.round(Math.max(SPLIT_MIN, Math.min(SPLIT_MAX, value)));
@@ -261,6 +274,7 @@
       {selected}
       onSelect={select}
       onOpen={(id) => { if (canModify) api.reveal(id).catch(failure); }}
+      onEnter={(id) => (mapDir = id)}
       onContextMenu={(_ids, x, y) => (menu = { x, y })}
     />
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -277,14 +291,14 @@
       onpointerdown={(e) => { dragging = true; e.preventDefault(); }}
     ></div>
     <div class="map-pane">
-      <Breadcrumbs dirId={mapDir} onNavigate={(id) => (mapDir = id)} />
+      <Breadcrumbs dirId={mapDir} {rootId} onNavigate={(id) => (mapDir = id)} />
       <div class="map-area">
         <Treemap
           dirId={mapDir}
           {selected}
           version={mapVersion}
           onSelect={selectFromMap}
-          onEnter={(id) => (mapDir = id)}
+          onEnter={enterFromMap}
         />
       </div>
     </div>

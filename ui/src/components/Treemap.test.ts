@@ -11,11 +11,14 @@ vi.mock('../lib/api');
 const rect = (id: number | null, x: number, y: number, w: number, h: number, isDir = false, depth = 0): RectDto =>
   ({ id, x, y, w, h, depth, isDir, category: 'video', name: '' });
 // dir 2 on the left with file 5 inside; file 3 top right; "small items" bottom right
+// folder 7 sits inside folder 2 (lower left) and holds file 8
 const rects = [
   rect(2, 0, 0, 400, 600, true),
   rect(3, 400, 0, 400, 300),
   rect(null, 400, 300, 400, 300),
   rect(5, 10, 10, 200, 200, false, 1),
+  rect(7, 10, 300, 300, 250, true, 1),
+  rect(8, 20, 310, 100, 100, false, 2),
 ];
 
 let layout: ReturnType<typeof mockLayout>;
@@ -84,26 +87,34 @@ describe('Treemap', () => {
     await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
     await fireEvent.click(canvas(), { clientX: 50, clientY: 50 });
     expect(onSelect).toHaveBeenLastCalledWith(5);
-    await fireEvent.click(canvas(), { clientX: 300, clientY: 400 });
+    await fireEvent.click(canvas(), { clientX: 350, clientY: 100 });
     expect(onSelect).toHaveBeenLastCalledWith(2);
     onSelect.mockClear();
     await fireEvent.click(canvas(), { clientX: 600, clientY: 450 });
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  test('double click on a directory enters it; on a file it does not', async () => {
+  test('double click opens the folder that was clicked, however deep it is', async () => {
     const { onEnter } = mount();
     await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
-    await fireEvent.dblClick(canvas(), { clientX: 300, clientY: 400 });
-    expect(onEnter).toHaveBeenCalledWith(2);
-    // In real layouts a folder's contents cover it completely, so the double
-    // click almost always lands on a file inside: that enters the folder too.
+    // on file 5, which lies directly in folder 2
     await fireEvent.dblClick(canvas(), { clientX: 50, clientY: 50 });
-    expect(onEnter).toHaveBeenCalledTimes(2);
     expect(onEnter).toHaveBeenLastCalledWith(2);
+    // on file 8, which lies in folder 7 inside folder 2: folder 7 opens, not its parent
+    await fireEvent.dblClick(canvas(), { clientX: 50, clientY: 350 });
+    expect(onEnter).toHaveBeenLastCalledWith(7);
+    // on the bare part of folder 7
+    await fireEvent.dblClick(canvas(), { clientX: 250, clientY: 500 });
+    expect(onEnter).toHaveBeenLastCalledWith(7);
+    expect(onEnter).toHaveBeenCalledTimes(3);
+  });
+
+  test('double click on a top-level file or on the "small items" block opens nothing', async () => {
+    const { onEnter } = mount();
+    await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
     await fireEvent.dblClick(canvas(), { clientX: 600, clientY: 100 });
     await fireEvent.dblClick(canvas(), { clientX: 600, clientY: 450 });
-    expect(onEnter).toHaveBeenCalledTimes(2);
+    expect(onEnter).not.toHaveBeenCalled();
   });
 
   test('hover shows a tooltip with the path and size', async () => {

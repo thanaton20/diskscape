@@ -26,14 +26,17 @@ describe('hitTest', () => {
     expect(hitTest(rects, 0, 0)?.id).toBe(1);
   });
 
-  test('hitTestFolder returns the outermost folder under the point', () => {
-    // inside file 2, which fills part of folder 1: the folder is what gets entered
+  test('hitTestFolder returns the innermost folder under the point', () => {
+    // inside file 2, which lies in folder 1: the folder that holds the block is what opens
     expect(hitTestFolder(rects, 20, 20)?.id).toBe(1);
     expect(hitTestFolder(rects, 80, 80)?.id).toBe(1);
-    // a top-level file is not a folder
+    // a top-level file has no folder below the one already shown
     expect(hitTestFolder(rects, 150, 50)).toBeNull();
     expect(hitTestFolder(rects, 250, 50)).toBeNull();
+    // folder 4 sits inside folder 1, file 6 inside folder 4
     const nested = [rect(1, 0, 0, 100, 100, 0, true), rect(4, 5, 5, 60, 60, 1, true), rect(6, 6, 6, 20, 20, 2)];
-    expect(hitTestFolder(nested, 10, 10)?.id).toBe(1);
+    expect(hitTestFolder(nested, 10, 10)?.id).toBe(4);
+    expect(hitTestFolder(nested, 50, 50)?.id).toBe(4);
+    expect(hitTestFolder(nested, 80, 80)?.id).toBe(1);
   });
 });

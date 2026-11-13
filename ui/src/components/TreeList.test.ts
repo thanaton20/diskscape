@@ -23,7 +23,7 @@ async function setup(selected: number[] = []) {
   vi.mocked(api.getChildren).mockImplementation(async (id) => (id === 0 ? children : [node(9, 'inner', 300)]));
   const model = new TreeModel(root);
   await model.expand(0);
-  const handlers = { onSelect: vi.fn(), onOpen: vi.fn(), onContextMenu: vi.fn() };
+  const handlers = { onSelect: vi.fn(), onOpen: vi.fn(), onEnter: vi.fn(), onContextMenu: vi.fn() };
   render(TreeList, { props: { model, selected, ...handlers } });
   return { model, ...handlers };
 }
@@ -59,7 +59,7 @@ describe('TreeList', () => {
     vi.mocked(api.getChildren).mockResolvedValue(many);
     const model = new TreeModel(root);
     await model.expand(0);
-    render(TreeList, { props: { model, selected: [], onSelect: vi.fn(), onOpen: vi.fn(), onContextMenu: vi.fn() } });
+    render(TreeList, { props: { model, selected: [], onSelect: vi.fn(), onOpen: vi.fn(), onEnter: vi.fn(), onContextMenu: vi.fn() } });
     const rows = screen.getAllByRole('row');
     expect(rows.length).toBeGreaterThan(5);
     expect(rows.length).toBeLessThan(100);
@@ -119,14 +119,29 @@ describe('TreeList', () => {
     expect(onSelect).toHaveBeenLastCalledWith([1]);
   });
 
-  test('double click opens a file and toggles a folder', async () => {
+  test('double click opens a file, and shows a folder on the map without expanding it', async () => {
     const user = userEvent.setup();
-    const { onOpen } = await setup();
+    const { onOpen, onEnter, model } = await setup();
     await user.dblClick(row('movie.mkv'));
     expect(onOpen).toHaveBeenCalledWith(1);
+    expect(onEnter).not.toHaveBeenCalled();
     await user.dblClick(row('sub'));
-    expect(await screen.findByRole('row', { name: /inner/ })).toBeInTheDocument();
+    expect(onEnter).toHaveBeenCalledWith(2);
     expect(onOpen).toHaveBeenCalledTimes(1);
+    // expanding stays the job of the triangle and the arrow keys
+    expect(model.rows.find((r) => r.node.id === 2)?.expanded).toBe(false);
+    // a folder with nothing readable inside can still be shown
+    await user.dblClick(row('locked'));
+    expect(onEnter).toHaveBeenLastCalledWith(4);
+  });
+
+  test('Enter does the same as a double click', async () => {
+    const user = userEvent.setup();
+    const { onOpen, onEnter } = await setup([2]);
+    screen.getByRole('treegrid').focus();
+    await user.keyboard('{Enter}');
+    expect(onEnter).toHaveBeenCalledWith(2);
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   test('right click selects the row if needed and asks for a menu', async () => {

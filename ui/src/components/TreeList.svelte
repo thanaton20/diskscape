@@ -10,9 +10,11 @@
     onSelect: (ids: number[]) => void;
     /** A file was double-clicked or Enter was pressed on it. */
     onOpen: (id: number) => void;
+    /** A folder was double-clicked or Enter was pressed on it: show it on the map. */
+    onEnter: (id: number) => void;
     onContextMenu: (ids: number[], x: number, y: number) => void;
   }
-  let { model, selected, onSelect, onOpen, onContextMenu }: Props = $props();
+  let { model, selected, onSelect, onOpen, onEnter, onContextMenu }: Props = $props();
 
   const ROW = 24;
   const OVERSCAN = 10;
@@ -71,9 +73,11 @@
     }
   }
 
+  // Expanding is the triangle's job (and the arrow keys'); a double click acts
+  // on the thing itself: a folder is shown on the map, a file in the file manager.
   function doubleClick(row: Row) {
-    if (row.node.hasChildren) toggle(row);
-    else if (row.node.kind !== 'dir') onOpen(row.node.id);
+    if (row.node.kind === 'dir') onEnter(row.node.id);
+    else onOpen(row.node.id);
   }
 
   function contextMenu(event: MouseEvent, row: Row) {

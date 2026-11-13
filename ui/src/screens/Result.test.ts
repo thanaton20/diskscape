@@ -133,6 +133,38 @@ describe('Result', () => {
       expect(screen.getByTestId('map-selection').style.left).toBe('400px');
     });
 
+    test('double click on a folder in the list opens it on the map; the back button returns', async () => {
+      mountWithMap();
+      await waitFor(() => expect(api.getTreemap).toHaveBeenCalledWith(0, 800, 600));
+      expect(screen.queryByRole('button', { name: 'Back to the scanned folder' })).not.toBeInTheDocument();
+      await userEvent.dblClick(await screen.findByRole('row', { name: /sub/ }));
+      await waitFor(() => expect(api.getTreemap).toHaveBeenLastCalledWith(3, 800, 600));
+      await userEvent.click(await screen.findByRole('button', { name: 'Back to the scanned folder' }));
+      await waitFor(() => expect(api.getTreemap).toHaveBeenLastCalledWith(0, 800, 600));
+      expect(screen.queryByRole('button', { name: 'Back to the scanned folder' })).not.toBeInTheDocument();
+    });
+
+    test('Escape returns the map to the scanned folder', async () => {
+      mountWithMap();
+      await userEvent.dblClick(await screen.findByRole('row', { name: /sub/ }));
+      await waitFor(() => expect(api.getTreemap).toHaveBeenLastCalledWith(3, 800, 600));
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(api.getTreemap).toHaveBeenLastCalledWith(0, 800, 600));
+      // at the top already: Escape does nothing more
+      const calls = vi.mocked(api.getTreemap).mock.calls.length;
+      await userEvent.keyboard('{Escape}');
+      expect(vi.mocked(api.getTreemap).mock.calls.length).toBe(calls);
+    });
+
+    test('double click on a folder in the map opens it and selects it in the list', async () => {
+      mountWithMap();
+      await waitFor(() => expect(api.getTreemap).toHaveBeenCalledWith(0, 800, 600));
+      await fireEvent.dblClick(map(), { clientX: 300, clientY: 400 });
+      await waitFor(() => expect(api.getTreemap).toHaveBeenLastCalledWith(3, 800, 600));
+      const row = await screen.findByRole('row', { name: /sub/ });
+      await waitFor(() => expect(row).toHaveAttribute('aria-selected', 'true'));
+    });
+
     test('double click on a folder in the map enters it, and the breadcrumbs lead back', async () => {
       mountWithMap();
       await waitFor(() => expect(api.getTreemap).toHaveBeenCalledWith(0, 800, 600));

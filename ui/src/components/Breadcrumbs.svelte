@@ -6,9 +6,11 @@
   interface Props {
     /** Folder currently shown on the map. */
     dirId: number;
+    /** The scanned folder: where the back button leads. */
+    rootId: number;
     onNavigate: (id: number) => void;
   }
-  let { dirId, onNavigate }: Props = $props();
+  let { dirId, rootId, onNavigate }: Props = $props();
 
   let ancestors = $state.raw<NodeDto[]>([]);
   let current = $state.raw<NodeDto | null>(null);
@@ -30,6 +32,11 @@
 </script>
 
 <nav class="crumbs" aria-label={t('crumbs.label')}>
+  {#if dirId !== rootId}
+    <button class="back" aria-label={t('map.back')} title="{t('map.back')} (Esc)" onclick={() => onNavigate(rootId)}>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3 4.5 8l5 5" /></svg>
+    </button>
+  {/if}
   {#each ancestors as ancestor (ancestor.id)}
     <button onclick={() => onNavigate(ancestor.id)}>{ancestor.name}</button>
     <span class="sep" aria-hidden="true">›</span>
@@ -66,6 +73,28 @@
   }
   button:hover {
     background: var(--row-hover);
+  }
+  button.back {
+    flex: none;
+    width: 22px;
+    height: 20px;
+    margin-right: 4px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--text);
+  }
+  button.back svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .sep {
     color: var(--muted);
