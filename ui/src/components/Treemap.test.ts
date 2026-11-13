@@ -24,7 +24,7 @@ const rects = [
 let layout: ReturnType<typeof mockLayout>;
 
 function mount(props: Partial<{ dirId: number; selected: number[]; version: number }> = {}) {
-  const handlers = { onSelect: vi.fn(), onEnter: vi.fn() };
+  const handlers = { onSelect: vi.fn(), onEnter: vi.fn(), onContextMenu: vi.fn() };
   const view = render(Treemap, { props: { dirId: 0, selected: [], version: 0, ...props, ...handlers } });
   return { ...handlers, ...view };
 }
@@ -115,6 +115,27 @@ describe('Treemap', () => {
     await fireEvent.dblClick(canvas(), { clientX: 600, clientY: 100 });
     await fireEvent.dblClick(canvas(), { clientX: 600, clientY: 450 });
     expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  test('right click asks for a menu on the block under the pointer', async () => {
+    const { onContextMenu } = mount();
+    await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
+    // file 8, nested two folders deep
+    await fireEvent.contextMenu(canvas(), { clientX: 50, clientY: 350 });
+    expect(onContextMenu).toHaveBeenLastCalledWith(8, 50, 350);
+    // the bare part of folder 2
+    await fireEvent.contextMenu(canvas(), { clientX: 350, clientY: 100 });
+    expect(onContextMenu).toHaveBeenLastCalledWith(2, 350, 100);
+    expect(onContextMenu).toHaveBeenCalledTimes(2);
+  });
+
+  test('right click on the "small items" block opens no menu, and never the browser\'s own', async () => {
+    const { onContextMenu } = mount();
+    await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 600, clientY: 450 });
+    canvas().dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(onContextMenu).not.toHaveBeenCalled();
   });
 
   test('hover shows a tooltip with the path and size', async () => {

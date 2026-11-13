@@ -31,6 +31,8 @@ export const deleteNodes = (ids: number[], mode: DeleteMode, treeId: number) =>
 export const reveal = (id: number) => invoke<void>('reveal', { id });
 /** Puts text on the clipboard through the backend; the webview's own clipboard API is unreliable. */
 export const copyText = (text: string) => writeText(text);
+/** Shows or hides the system preview (macOS Quick Look) of one item. */
+export const togglePreview = (id: number) => invoke<void>('toggle_preview', { id });
 export const requestElevation = () => invoke<void>('request_elevation');
 
 const single = (picked: string | string[] | null): string | null =>

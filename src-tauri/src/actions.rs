@@ -132,6 +132,35 @@ pub fn pkexec_command(exe: &Path, env: &dyn Fn(&str) -> Option<String>) -> Vec<S
     cmd
 }
 
+/// What pressing Space should do to the preview window.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PreviewStep {
+    Open,
+    Close,
+    /// Close the one showing and open the newly selected item.
+    Switch,
+}
+
+/// `current` is the node being previewed and whether its window is still open
+/// (the user may have closed it by hand). Works as in Finder: Space on the
+/// same item closes the preview, on another item moves the preview to it.
+pub fn preview_step(current: Option<(NodeId, bool)>, requested: NodeId) -> PreviewStep {
+    match current {
+        Some((id, true)) if id == requested => PreviewStep::Close,
+        Some((_, true)) => PreviewStep::Switch,
+        _ => PreviewStep::Open,
+    }
+}
+
+/// Arguments for `qlmanage`, the command-line door to macOS Quick Look. Only
+/// an absolute path is accepted, so a file name can never be read as an option.
+pub fn quick_look_args(path: &Path) -> Result<Vec<std::ffi::OsString>, String> {
+    if !path.is_absolute() {
+        return Err("a preview needs an absolute path".into());
+    }
+    Ok(vec!["-p".into(), path.as_os_str().to_owned()])
+}
+
 // ------------------------------------------------------------ commands
 
 #[tauri::command(async)]
@@ -163,6 +192,48 @@ pub fn reveal(id: NodeId, app: AppHandle, state: State<'_, AppState>) -> Result<
         reveal_path(guard.as_ref().ok_or(NO_TREE)?, id)?
     };
     app.opener().reveal_item_in_dir(&path).map_err(|e| e.to_string())
+}
+
+/// Shows or hides the system preview (macOS Quick Look) of one item. Looking
+/// only: nothing is opened in another program and nothing is changed.
+#[tauri::command(async)]
+pub fn toggle_preview(id: NodeId, state: State<'_, AppState>) -> Result<(), String> {
+    let path = {
+        let guard = state.tree.read().map_err(|_| "internal state is poisoned".to_string())?;
+        reveal_path(guard.as_ref().ok_or(NO_TREE)?, id)?
+    };
+    show_preview(&state, id, &path)
+}
+
+#[cfg(target_os = "macos")]
+fn show_preview(state: &AppState, id: NodeId, path: &Path) -> Result<(), String> {
+    use crate::state::Preview;
+    use std::process::{Command, Stdio};
+
+    let mut slot = state.preview.lock().map_err(|_| "internal state is poisoned".to_string())?;
+    let current = slot.as_mut().map(|p| (p.id, matches!(p.child.try_wait(), Ok(None))));
+    let step = preview_step(current, id);
+    if let Some(mut old) = slot.take() {
+        let _ = old.child.kill();
+        let _ = old.child.wait();
+    }
+    if step == PreviewStep::Close {
+        return Ok(());
+    }
+    let child = Command::new("/usr/bin/qlmanage")
+        .args(quick_look_args(path)?)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("cannot start Quick Look: {e}"))?;
+    *slot = Some(Preview { id, child });
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_preview(_state: &AppState, _id: NodeId, _path: &Path) -> Result<(), String> {
+    Err("a system preview is only available on macOS".into())
 }
 
 /// Helps the user give the app access to what it could not read. The app
@@ -314,6 +385,28 @@ mod tests {
         assert!(check_tree(&first, first.token()).is_ok());
         assert!(check_tree(&second, first.token()).is_err());
         assert!(check_tree(&first, 0).is_err());
+    }
+
+    #[test]
+    fn space_toggles_the_preview_like_finder_does() {
+        use PreviewStep::*;
+        // nothing open, or the window was closed by hand: open
+        assert_eq!(preview_step(None, 5), Open);
+        assert_eq!(preview_step(Some((5, false)), 5), Open);
+        assert_eq!(preview_step(Some((4, false)), 5), Open);
+        // the same item again: close
+        assert_eq!(preview_step(Some((5, true)), 5), Close);
+        // another item while one is showing: switch to it
+        assert_eq!(preview_step(Some((4, true)), 5), Switch);
+    }
+
+    #[test]
+    fn quick_look_is_given_only_an_absolute_path() {
+        let args = quick_look_args(Path::new("/Users/me/My Files/-odd name.txt")).unwrap();
+        assert_eq!(args, ["-p", "/Users/me/My Files/-odd name.txt"]);
+        // a relative path could be read as an option
+        assert!(quick_look_args(Path::new("-p")).is_err());
+        assert!(quick_look_args(Path::new("relative/file")).is_err());
     }
 
     #[test]

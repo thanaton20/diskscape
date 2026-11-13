@@ -50,6 +50,7 @@
   "menu.reveal.macos": "Показать в Finder",
   "menu.reveal.windows": "Показать в Проводнике",
   "menu.reveal.linux": "Показать в файловом менеджере",
+  "menu.preview": "Быстрый просмотр",
   "menu.copyPath": "Скопировать путь",
   "menu.trash": "В Корзину",
   "menu.permanent": "Удалить насовсем…",

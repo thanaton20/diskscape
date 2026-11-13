@@ -16,6 +16,26 @@ pub struct AppState {
     pub generation: AtomicU64,
     /// How long the scan that produced `tree` took.
     pub elapsed_ms: AtomicU64,
+    /// The Quick Look window currently open, if any (macOS).
+    pub preview: Mutex<Option<Preview>>,
+}
+
+/// A running system preview and the node it shows.
+pub struct Preview {
+    pub id: diskscape_core::tree::NodeId,
+    pub child: std::process::Child,
+}
+
+impl AppState {
+    /// Closes the preview window, if one is open.
+    pub fn close_preview(&self) {
+        if let Ok(mut slot) = self.preview.lock() {
+            if let Some(mut preview) = slot.take() {
+                let _ = preview.child.kill();
+                let _ = preview.child.wait();
+            }
+        }
+    }
 }
 
 /// Message used when a command needs a tree and there is none.

@@ -1,4 +1,4 @@
-export type Action = 'trash' | 'permanent' | 'copyPath';
+export type Action = 'trash' | 'permanent' | 'copyPath' | 'preview';
 
 type Keys = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'altKey' | 'metaKey' | 'ctrlKey'> & { code?: string };
 
@@ -8,6 +8,7 @@ type Keys = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'altKey' | 'metaKey' | 'ctr
  * - Delete → Trash; on macOS also ⌘⌫, as in Finder.
  * - Shift+Delete → delete permanently; on macOS also ⌥⌘⌫.
  * - Ctrl+C (⌘C on macOS) → copy path.
+ * - Space → preview.
  *
  * Any extra modifier makes it "no action": a near miss must never delete.
  */
@@ -15,6 +16,9 @@ export function matchShortcut(e: Keys, isMac: boolean): Action | null {
   const mods = [e.shiftKey, e.altKey, e.metaKey, e.ctrlKey];
   const only = (...held: boolean[]) => mods.every((down, i) => down === held[i]);
 
+  if (e.key === ' ') {
+    return only(false, false, false, false) ? 'preview' : null;
+  }
   if (e.key === 'Delete') {
     if (only(false, false, false, false)) return 'trash';
     if (only(true, false, false, false)) return 'permanent';

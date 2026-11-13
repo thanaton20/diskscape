@@ -42,6 +42,14 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('м', { ctrlKey: true }, 'KeyV'), false)).toBeNull();
   });
 
+  test('Space asks for a preview, only without modifiers', () => {
+    expect(matchShortcut(key(' '), true)).toBe('preview');
+    expect(matchShortcut(key(' '), false)).toBe('preview');
+    expect(matchShortcut(key(' ', { shiftKey: true }), true)).toBeNull();
+    expect(matchShortcut(key(' ', { metaKey: true }), true)).toBeNull();
+    expect(matchShortcut(key(' ', { ctrlKey: true }), false)).toBeNull();
+  });
+
   test('anything else, and near misses, do nothing', () => {
     expect(matchShortcut(key('Backspace'), true)).toBeNull();
     expect(matchShortcut(key('Backspace'), false)).toBeNull();

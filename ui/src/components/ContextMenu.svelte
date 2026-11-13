@@ -3,7 +3,7 @@
   import { t } from '../lib/i18n';
   import { platform } from '../lib/platform';
 
-  export type MenuAction = 'reveal' | 'copyPath' | 'trash' | 'permanent';
+  export type MenuAction = 'preview' | 'reveal' | 'copyPath' | 'trash' | 'permanent';
 
   interface Props {
     x: number;
@@ -51,6 +51,11 @@
   style:left="{Math.max(4, Math.min(x, window.innerWidth - 220))}px"
   style:top="{Math.max(4, Math.min(y, window.innerHeight - 150))}px"
 >
+  {#if platform === 'macos'}
+    <button role="menuitem" disabled={!canModify || !single} onclick={() => onAction('preview')}>
+      {t('menu.preview')}
+    </button>
+  {/if}
   <button role="menuitem" disabled={!canModify || !single} onclick={() => onAction('reveal')}>
     {t(`menu.reveal.${platform}`)}
   </button>

@@ -16,8 +16,10 @@
     onSelect: (id: number) => void;
     /** A folder block was double-clicked. */
     onEnter: (id: number) => void;
+    /** A block was right-clicked. */
+    onContextMenu: (id: number, x: number, y: number) => void;
   }
-  let { dirId, selected, version, onSelect, onEnter }: Props = $props();
+  let { dirId, selected, version, onSelect, onEnter, onContextMenu }: Props = $props();
 
   const RESIZE_DEBOUNCE = 100;
   const locale = getLocale();
@@ -156,6 +158,13 @@
     if (folder && folder.id !== null) onEnter(folder.id);
   }
 
+  function contextMenu(event: MouseEvent) {
+    // Never the webview's own menu, whatever is under the pointer.
+    event.preventDefault();
+    const { hit } = at(event);
+    if (hit && hit.id !== null) onContextMenu(hit.id, event.clientX, event.clientY);
+  }
+
   async function move(event: MouseEvent) {
     const { x, y, hit } = at(event);
     if (!hit) {
@@ -198,6 +207,7 @@
     aria-label={t('map.label')}
     onclick={click}
     ondblclick={doubleClick}
+    oncontextmenu={contextMenu}
     onmousemove={move}
     onmouseleave={leave}
   ></canvas>

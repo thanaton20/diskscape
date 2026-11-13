@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import Result from './Result.svelte';
 import * as api from '../lib/api';
@@ -20,7 +20,7 @@ const okResult = (id: number, freed: number): DeleteResult => ({ id, ok: true, f
 let layout: ReturnType<typeof mockLayout>;
 let writeText: ReturnType<typeof vi.fn>;
 
-function mount(overrides: Partial<Summary> = {}) {
+function mount(overrides: Partial<Summary> = {}, prepare: () => void = () => {}) {
   vi.mocked(api.getSummary).mockResolvedValue({ ...summary, ...overrides });
   vi.mocked(api.getChildren).mockImplementation(async (id) => (id === 0 ? files : [node(9, 'inner.bin', 200 * KB)]));
   vi.mocked(api.getTreemap).mockResolvedValue([]);
@@ -36,6 +36,7 @@ function mount(overrides: Partial<Summary> = {}) {
   }));
   vi.mocked(api.deleteNodes).mockImplementation(async (ids) => ids.map((id) => okResult(id, 100 * KB)));
   vi.mocked(api.reveal).mockResolvedValue(undefined);
+  prepare();
   render(Result, { props: { root, onNewScan: vi.fn() } });
 }
 
@@ -292,6 +293,70 @@ describe('Result actions', () => {
     mount();
     await userEvent.dblClick(await row('a\\.bin'));
     await waitFor(() => expect(api.reveal).toHaveBeenCalledWith(1));
+  });
+
+  describe('from the map', () => {
+    // a.bin (1) fills the left half, b.bin (2) the upper right, sub (3) the lower right
+    const withMap = () =>
+      mount({}, () => {
+        vi.mocked(api.getTreemap).mockResolvedValue([
+          { id: 1, x: 0, y: 0, w: 400, h: 600, depth: 0, isDir: false, category: 'other', name: '' },
+          { id: 2, x: 400, y: 0, w: 400, h: 300, depth: 0, isDir: false, category: 'other', name: '' },
+          { id: 3, x: 400, y: 300, w: 400, h: 300, depth: 0, isDir: true, category: 'other', name: '' },
+        ]);
+      });
+    const map = () => screen.getByRole('img', { name: 'Map of disk usage' });
+
+    test('right click on a block selects it, shows it in the list and opens the same menu', async () => {
+      withMap();
+      await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
+      await row('a\\.bin');
+      await fireEvent.contextMenu(map(), { clientX: 100, clientY: 100 });
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
+      await waitFor(async () => expect(await row('a\\.bin')).toHaveAttribute('aria-selected', 'true'));
+      await userEvent.click(within(menu).getByRole('menuitem', { name: 'Move to Trash' }));
+      await waitFor(() => expect(api.deleteNodes).toHaveBeenCalledWith([1], 'trash', 7));
+    });
+
+    test('right click on another block replaces the selection', async () => {
+      withMap();
+      await userEvent.click(await row('a\\.bin'));
+      await fireEvent.contextMenu(map(), { clientX: 600, clientY: 100 });
+      await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Copy path' }));
+      await waitFor(() => expect(api.copyText).toHaveBeenCalledWith('/r/b.bin'));
+    });
+
+    test('right click on a block that is part of the selection keeps the whole selection', async () => {
+      withMap();
+      const user = userEvent.setup();
+      await user.click(await row('a\\.bin'));
+      await user.keyboard('{Control>}');
+      await user.click(await row('b\\.bin'));
+      await user.keyboard('{/Control}');
+      await fireEvent.contextMenu(map(), { clientX: 600, clientY: 100 });
+      await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Move to Trash' }));
+      await waitFor(() => expect(api.deleteNodes).toHaveBeenCalledWith([1, 2], 'trash', 7));
+    });
+
+    test('permanent delete from the map still goes through the dialog', async () => {
+      withMap();
+      await waitFor(() => expect(api.getTreemap).toHaveBeenCalled());
+      await row('a\\.bin');
+      await fireEvent.contextMenu(map(), { clientX: 600, clientY: 100 });
+      await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete permanently…' }));
+      const dialog = await screen.findByRole('alertdialog');
+      expect(dialog).toHaveTextContent('/r/b.bin');
+      expect(api.deleteNodes).not.toHaveBeenCalled();
+    });
+  });
+
+  test('Space does nothing where there is no system preview', async () => {
+    // the test environment is not macOS
+    mount();
+    await userEvent.click(await row('a\\.bin'));
+    await userEvent.keyboard(' ');
+    expect(api.togglePreview).not.toHaveBeenCalled();
   });
 
   test('copy path puts the paths on the clipboard', async () => {

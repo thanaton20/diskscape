@@ -29,7 +29,15 @@ fn main() {
             actions::delete_nodes,
             actions::reveal,
             actions::request_elevation,
+            actions::toggle_preview,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Diskscape");
+        .build(tauri::generate_context!())
+        .expect("error while running Diskscape")
+        .run(|app, event| {
+            // A preview window belongs to this app: do not leave it behind.
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                app.state::<state::AppState>().close_preview();
+            }
+        });
 }

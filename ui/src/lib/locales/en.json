@@ -50,6 +50,7 @@
   "menu.reveal.macos": "Show in Finder",
   "menu.reveal.windows": "Show in Explorer",
   "menu.reveal.linux": "Show in file manager",
+  "menu.preview": "Quick Look",
   "menu.copyPath": "Copy path",
   "menu.trash": "Move to Trash",
   "menu.permanent": "Delete permanently…",

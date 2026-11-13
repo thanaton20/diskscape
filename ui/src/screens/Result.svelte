@@ -107,6 +107,9 @@
         toast(false, t('toast.copied'));
       } else if (!canModify) {
         return;
+      } else if (action === 'preview') {
+        // The system preview exists only on macOS.
+        if (ids.length === 1 && platform === 'macos') await api.togglePreview(ids[0]);
       } else if (action === 'reveal') {
         if (ids.length === 1) await api.reveal(ids[0]);
       } else if (action === 'trash') {
@@ -212,8 +215,22 @@
     }
     const action = matchShortcut(event, platform === 'macos');
     if (!action || selected.length === 0) return;
+    if (action === 'preview') {
+        // Space on a focused button presses that button; elsewhere it previews,
+        // where the system has a preview to offer.
+        if (platform !== 'macos' || target?.closest('button, a, select')) return;
+    }
     event.preventDefault();
     void act(action);
+  }
+
+  /**
+   * A block was right-clicked on the map. As in the list: a block outside the
+   * selection becomes the selection, one inside it keeps the whole selection.
+   */
+  async function menuFromMap(id: number, x: number, y: number) {
+    if (!selected.includes(id)) await selectFromMap(id);
+    menu = { x, y };
   }
 
   /** A folder was double-clicked on the map: open it there and point at it in the list. */
@@ -299,6 +316,7 @@
           version={mapVersion}
           onSelect={selectFromMap}
           onEnter={enterFromMap}
+          onContextMenu={menuFromMap}
         />
       </div>
     </div>

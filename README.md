@@ -55,12 +55,16 @@ Pick a disk on the start screen, choose a folder, or start it with a path:
 diskscape ~/Downloads
 ```
 
+The context menu opens with a right click on a row in the list or on a
+block of the map.
+
 | Action | How |
 |---|---|
 | Expand / collapse a folder | click the triangle, or → / ← |
 | Show a folder on the map | double-click it in the list or on the map, or Enter |
 | Back to the whole scan on the map | Esc, or the ← button above the map |
 | Select several items | Ctrl/⌘-click, Shift-click |
+| Preview (macOS Quick Look) | Space with one item selected, or the context menu; Space again closes it |
 | Show in the file manager | context menu, or double-click a file |
 | Copy path | context menu, or Ctrl+C (⌘C on macOS) |
 | Move to Trash | context menu, or Delete (also ⌘⌫ on macOS) |
