@@ -133,6 +133,7 @@ pub fn pkexec_command(exe: &Path, env: &dyn Fn(&str) -> Option<String>) -> Vec<S
 }
 
 /// What pressing Space should do to the preview window.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PreviewStep {
     Open,
@@ -144,6 +145,7 @@ pub enum PreviewStep {
 /// `current` is the node being previewed and whether its window is still open
 /// (the user may have closed it by hand). Works as in Finder: Space on the
 /// same item closes the preview, on another item moves the preview to it.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn preview_step(current: Option<(NodeId, bool)>, requested: NodeId) -> PreviewStep {
     match current {
         Some((id, true)) if id == requested => PreviewStep::Close,
@@ -154,6 +156,7 @@ pub fn preview_step(current: Option<(NodeId, bool)>, requested: NodeId) -> Previ
 
 /// Arguments for `qlmanage`, the command-line door to macOS Quick Look. Only
 /// an absolute path is accepted, so a file name can never be read as an option.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn quick_look_args(path: &Path) -> Result<Vec<std::ffi::OsString>, String> {
     if !path.is_absolute() {
         return Err("a preview needs an absolute path".into());
@@ -400,6 +403,9 @@ mod tests {
         assert_eq!(preview_step(Some((4, true)), 5), Switch);
     }
 
+    // Unix paths: Quick Look exists only on macOS, and on Windows a path
+    // without a drive letter is not absolute.
+    #[cfg(unix)]
     #[test]
     fn quick_look_is_given_only_an_absolute_path() {
         let args = quick_look_args(Path::new("/Users/me/My Files/-odd name.txt")).unwrap();
