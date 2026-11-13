@@ -216,11 +216,15 @@
 </div>
 
 <style>
+  /* min-height: 0 lets the list be shorter than its rows, so it scrolls inside
+     itself instead of pushing its container taller. */
   .list {
     height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     min-width: 0;
+    overflow: hidden;
     background: var(--panel);
   }
   .head,

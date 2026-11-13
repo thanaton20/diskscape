@@ -357,10 +357,16 @@
     font-size: 11px;
     color: var(--muted);
   }
+  /* The single row must be exactly as tall as the space left for it. With an
+     automatic row, a long list made the row — and with it the map — as tall as
+     all of the list's rows, far beyond the window: the map stretched until only
+     an empty corner of it was in view, and the status bar slid off-screen. */
   .panes {
     flex: 1;
     min-height: 0;
     display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
   }
   .panes.dragging {
     cursor: col-resize;

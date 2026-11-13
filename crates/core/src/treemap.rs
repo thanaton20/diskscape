@@ -6,7 +6,8 @@
 
 use crate::category::{categorize, Category};
 use crate::tree::{NodeId, NodeKind, SortKey, Tree};
-use std::collections::VecDeque;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 
 /// One block of the map, in canvas pixels.
 #[derive(Clone, Debug, PartialEq)]
@@ -28,7 +29,7 @@ pub struct Rect {
 pub const MIN_PX: f32 = 3.0;
 
 /// Upper bound on the number of rectangles returned.
-pub const MAX_RECTS: usize = 5000;
+pub const MAX_RECTS: usize = 12_000;
 
 /// Upper bound on the blocks one folder may contribute, so that a single huge
 /// folder cannot use up the whole budget and leave its siblings undrawn.
@@ -39,8 +40,8 @@ const INSET: f64 = 1.0;
 
 /// Lays out the contents of `dir` on a `width` × `height` canvas.
 ///
-/// Rectangles come out breadth-first, so a directory always precedes its
-/// contents and drawing them in order paints children over parents. Areas are
+/// A directory always precedes its contents in the result, so drawing the
+/// rectangles in order paints children over parents. Areas are
 /// proportional to disk usage. Returns nothing for an empty or zero-sized
 /// directory, a node that is not a directory, or a degenerate canvas.
 pub fn layout(tree: &Tree, dir: NodeId, width: f32, height: f32) -> Vec<Rect> {
@@ -48,10 +49,20 @@ pub fn layout(tree: &Tree, dir: NodeId, width: f32, height: f32) -> Vec<Rect> {
     if !(width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0) {
         return rects;
     }
-    let mut queue: VecDeque<(NodeId, Area, u8)> = VecDeque::new();
-    queue.push_back((dir, Area { x: 0.0, y: 0.0, w: f64::from(width), h: f64::from(height) }, 0));
+    // Folders are filled in order of the area they cover, largest first, so
+    // that the block budget is spent where it shows. Going level by level
+    // instead would use it up on thousands of small folders near the top and
+    // leave the big ones deep in the tree as empty frames.
+    let mut queue: BinaryHeap<Job> = BinaryHeap::new();
+    let mut order = 0u64;
+    queue.push(Job {
+        container: dir,
+        area: Area { x: 0.0, y: 0.0, w: f64::from(width), h: f64::from(height) },
+        depth: 0,
+        order,
+    });
 
-    while let Some((container, area, depth)) = queue.pop_front() {
+    while let Some(Job { container, area, depth, .. }) = queue.pop() {
         // Children worth drawing, largest first.
         let kids: Vec<(NodeId, f64)> = tree
             .children_sorted(container, SortKey::Size, true)
@@ -119,12 +130,49 @@ pub fn layout(tree: &Tree, dir: NodeId, width: f32, height: f32) -> Vec<Rect> {
                     w: place.w - 2.0 * INSET,
                     h: place.h - 2.0 * INSET,
                 };
-                queue.push_back((*id, inner, depth.saturating_add(1)));
+                order += 1;
+                queue.push(Job { container: *id, area: inner, depth: depth.saturating_add(1), order });
             }
         }
     }
     rects
 }
+
+/// A folder waiting to have its contents laid out.
+struct Job {
+    container: NodeId,
+    area: Area,
+    depth: u8,
+    /// Discovery order; breaks ties so the result does not depend on heap internals.
+    order: u64,
+}
+
+impl Job {
+    fn size(&self) -> f64 {
+        self.area.w * self.area.h
+    }
+}
+
+impl Ord for Job {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Largest area first; among equals, the one found first.
+        self.size().total_cmp(&other.size()).then_with(|| other.order.cmp(&self.order))
+    }
+}
+
+impl PartialOrd for Job {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Job {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Job {}
 
 #[derive(Clone, Copy, Debug)]
 struct Area {
@@ -378,6 +426,41 @@ mod tests {
             // a folder is either filled edge to edge or not entered at all
             assert!(inside == 0.0 || inside >= 0.98 * interior, "{inside} of {interior} px² drawn");
         }
+    }
+
+    #[test]
+    fn budget_goes_to_the_largest_folders_first() {
+        // One folder holds 90% of the space, nine levels down. Small folders
+        // near the top hold the rest in more visible files than the whole
+        // block budget. Going level by level would spend everything on the
+        // small folders and leave the big one an empty frame.
+        let mut t = new_tree();
+        let root = t.root();
+        let mut deep = dir(&mut t, root, "big");
+        for i in 0..8 {
+            deep = dir(&mut t, deep, &format!("level{i}"));
+        }
+        let big_files: Vec<NodeId> = (0..100).map(|i| file(&mut t, deep, &format!("video{i}.mkv"), 9_000_000)).collect();
+        let small_dirs = MAX_RECTS / 100 + 20;
+        let small_file = 100_000_000 / (small_dirs as u64 * 100);
+        for d in 0..small_dirs {
+            let small = dir(&mut t, root, &format!("small{d}"));
+            for i in 0..100 {
+                file(&mut t, small, &format!("f{i}"), small_file);
+            }
+        }
+        t.finalize();
+        let (w, h) = (3000.0, 2000.0);
+        let r = layout(&t, root, w, h);
+        assert!(r.len() <= MAX_RECTS);
+        let drawn = big_files.iter().filter(|id| r.iter().any(|x| x.id == Some(**id))).count();
+        assert_eq!(drawn, 100, "the files of the largest folder must be drawn");
+        let file_area: f32 = r.iter().filter(|x| !x.is_dir).map(area).sum();
+        assert!(file_area >= 0.85 * w * h, "files cover only {file_area} px²");
+        // a folder still comes before everything inside it
+        let big = r.iter().position(|x| x.depth == 0 && x.is_dir && area(x) > 0.5 * w * h).unwrap();
+        let first_file = r.iter().position(|x| x.id == Some(big_files[0])).unwrap();
+        assert!(big < first_file);
     }
 
     #[test]
